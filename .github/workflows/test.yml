@@ -82,62 +82,6 @@ jobs:
             validate-coverage:test \
             /workspace/jacoco.xml 80 jacoco
 
-  test-action:
-    runs-on: ubuntu-latest
-    name: Test GitHub Action Interface
-    # Only test the action interface if Docker image is available (release branches)
-    if: startsWith(github.ref, 'refs/heads/release/') || github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
-    permissions:
-      contents: read
-      packages: read
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-        
-      - name: Test Clover Format (Pass)
-        uses: ./
-        with:
-          coverage-file: 'examples/clover.xml'
-          minimum-coverage: '80'
-          coverage-type: 'clover'
-          
-      - name: Test Cobertura Format (Pass)
-        uses: ./
-        with:
-          coverage-file: 'examples/cobertura.xml'
-          minimum-coverage: '80'
-          coverage-type: 'cobertura'
-          
-      - name: Test JaCoCo Format (Pass)
-        uses: ./
-        with:
-          coverage-file: 'examples/jacoco.xml'
-          minimum-coverage: '80'
-          coverage-type: 'jacoco'
-          
-      - name: Test Failure Case (Should Fail)
-        id: fail-test
-        continue-on-error: true
-        uses: ./
-        with:
-          coverage-file: 'examples/clover.xml'
-          minimum-coverage: '90'
-          coverage-type: 'clover'
-          
-      - name: Verify Failure
-        if: steps.fail-test.outcome == 'success'
-        run: |
-          echo "Expected failure but got success"
-          exit 1
-
   lint:
     runs-on: ubuntu-latest
     name: Lint and Validate

@@ -80,7 +80,7 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
 fi
 
 # Check for uncommitted changes
-if ! git diff-index --quiet HEAD --; then
+if ! git diff-index --quiet HEAD; then
     error "You have uncommitted changes. Please commit or stash them first."
     exit 1
 fi

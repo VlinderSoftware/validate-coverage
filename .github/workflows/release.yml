@@ -2,8 +2,6 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - 'release/v*'
     tags:
       - 'v*.*.*'
   pull_request:
@@ -46,16 +44,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # For main branch pushes: 'main' tag for development
-            type=raw,value=main,enable={{is_default_branch}}
-            # For release branches: branch name tag (without pattern matching)
-            type=ref,event=branch
             # For tags: semver patterns
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            # Latest tag only for release tags
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # Latest tag for all releases
+            type=raw,value=latest
 
       - name: Build and push Docker image
         id: build

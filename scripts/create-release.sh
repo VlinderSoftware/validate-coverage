@@ -113,6 +113,10 @@ if git branch -r | grep -q "origin/$RELEASE_BRANCH"; then
     log "Release branch already exists, checking out"
     git checkout "$RELEASE_BRANCH"
     git pull origin "$RELEASE_BRANCH"
+    
+    # Merge latest changes from main to keep release branch up to date
+    log "Merging latest changes from main into release branch"
+    git merge main --no-edit
 else
     log "Creating new release branch"
     git checkout -b "$RELEASE_BRANCH"

@@ -61,7 +61,7 @@ jobs:
           echo "Updating action.yml to use $NEW_TAG"
           
           # Update the Docker image reference in action.yml
-          sed -i "s|image: 'docker://ghcr.io/vlindersoftware/validate-coverage:.*'|image: 'docker://ghcr.io/vlindersoftware/validate-coverage:$NEW_TAG'|" action.yml
+          sed -i "s|image: 'ghcr.io/vlindersoftware/validate-coverage:.*'|image: 'ghcr.io/vlindersoftware/validate-coverage:$NEW_TAG'|" action.yml
           
           echo "Updated action.yml:"
           grep "image:" action.yml
@@ -70,6 +70,12 @@ jobs:
         run: |
           NEW_TAG="${{ steps.extract-version.outputs.new_tag }}"
           NEW_VERSION="${{ steps.extract-version.outputs.new_version }}"
+          
+          # Extract version components for convenience tags
+          MAJOR=$(echo "$NEW_VERSION" | cut -d'.' -f1)
+          MINOR=$(echo "$NEW_VERSION" | cut -d'.' -f2)
+          MAJOR_TAG="v$MAJOR"
+          MINOR_TAG="v$MAJOR.$MINOR"
           
           # Configure git
           git config user.name "github-actions[bot]"
@@ -81,17 +87,33 @@ jobs:
           
           Automatically bumped patch version due to dependency update in PR #${{ github.event.pull_request.number }}"
           
-          # Create and push the new tag
+          # Create the full version tag
           git tag -a "$NEW_TAG" -m "chore: release $NEW_TAG
           
           Patch version bump after dependency update:
           - ${{ github.event.pull_request.title }}
           - Merged in PR #${{ github.event.pull_request.number }}"
           
+          # Delete and recreate convenience tags
+          echo "Updating convenience tags: $MAJOR_TAG, $MINOR_TAG"
+          
+          # Delete existing tags locally and remotely (ignore errors)
+          git tag -d "$MAJOR_TAG" 2>/dev/null || true
+          git tag -d "$MINOR_TAG" 2>/dev/null || true
+          git push origin ":refs/tags/$MAJOR_TAG" 2>/dev/null || true
+          git push origin ":refs/tags/$MINOR_TAG" 2>/dev/null || true
+          
+          # Create new convenience tags
+          git tag -a "$MAJOR_TAG" -m "chore: update major tag $MAJOR_TAG to $NEW_TAG"
+          git tag -a "$MINOR_TAG" -m "chore: update minor tag $MINOR_TAG to $NEW_TAG"
+          
+          # Push everything
           git push origin HEAD
           git push origin "$NEW_TAG"
+          git push origin "$MAJOR_TAG"
+          git push origin "$MINOR_TAG"
           
-          echo "Created and pushed tag: $NEW_TAG"
+          echo "Created and pushed tags: $NEW_TAG, $MINOR_TAG, $MAJOR_TAG"
 
       - name: Trigger Docker build for new tag
         uses: actions/github-script@v7
@@ -126,7 +148,7 @@ jobs:
             **Docker Image:**
             - `ghcr.io/vlindersoftware/validate-coverage:${{ steps.extract-version.outputs.new_tag }}`
             
-            This release includes the latest dependency updates while maintaining compatibility within the same major.minor version.
+            This release includes the latest dependency updates while maintaining compatibility within the same major version.
           prerelease: false
           generate_release_notes: true
 
@@ -135,10 +157,27 @@ jobs:
         with:
           script: |
             const newTag = '${{ steps.extract-version.outputs.new_tag }}';
+            const version = newTag.replace('v', '');
+            const parts = version.split('.');
+            const majorTag = `v${parts[0]}`;
+            const minorTag = `v${parts[0]}.${parts[1]}`;
+            
+            const message = `🎉 **Patch Version Released** 🎉
+
+            This dependency update triggered the creation of patch version **${newTag}**.
+
+            **Available tags:**
+            - \`${newTag}\` (full version)
+            - \`${minorTag}\` (minor convenience tag)  
+            - \`${majorTag}\` (major convenience tag)
+
+            **Docker Image:** \`ghcr.io/vlindersoftware/validate-coverage:${newTag}\`
+
+            The new version is now available and published to GitHub Container Registry.`;
             
             github.rest.issues.createComment({
               issue_number: ${{ github.event.pull_request.number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🎉 **Patch Version Released** 🎉\n\nThis dependency update triggered the creation of patch version **${newTag}**.\n\n**Docker Image:** \`ghcr.io/vlindersoftware/validate-coverage:${newTag}\`\n\nThe new version is now available and published to GitHub Container Registry.`
+              body: message
             });

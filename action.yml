@@ -1,0 +1,39 @@
+name: 'Validate Coverage'
+description: 'Validate test coverage from XML files against minimum thresholds'
+author: 'Vlinder Software'
+
+branding:
+  icon: 'check-circle'
+  color: 'green'
+
+inputs:
+  coverage-file:
+    description: 'Path to the coverage XML file (e.g., coverage/cobertura.xml)'
+    required: true
+  minimum-coverage:
+    description: 'Minimum coverage percentage required (e.g., 85)'
+    required: true
+    default: '85'
+  coverage-type:
+    description: 'Type of coverage XML format (clover, cobertura, jacoco)'
+    required: false
+    default: 'cobertura'
+  working-directory:
+    description: 'Working directory where the coverage file is located'
+    required: false
+    default: '.'
+
+outputs:
+  coverage-percentage:
+    description: 'The actual coverage percentage found'
+  status:
+    description: 'Pass or fail status of the validation'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.coverage-file }}
+    - ${{ inputs.minimum-coverage }}
+    - ${{ inputs.coverage-type }}
+    - ${{ inputs.working-directory }}

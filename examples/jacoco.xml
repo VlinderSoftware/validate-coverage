@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<report name="JaCoCo Coverage Report">
+  <sessioninfo id="example" start="1691234567" dump="1691234567"/>
+  <counter type="INSTRUCTION" missed="15" covered="85"/>
+  <counter type="BRANCH" missed="4" covered="16"/>
+  <counter type="LINE" missed="3" covered="17"/>
+  <counter type="COMPLEXITY" missed="2" covered="8"/>
+  <counter type="METHOD" missed="1" covered="9"/>
+  <counter type="CLASS" missed="0" covered="2"/>
+</report>

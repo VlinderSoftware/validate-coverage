@@ -1,0 +1,64 @@
+name: Test Coverage Validation Action
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-action:
+    runs-on: ubuntu-latest
+    name: Test Coverage Validation
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Test Clover Format (Pass)
+        uses: ./
+        with:
+          coverage-file: 'examples/clover.xml'
+          minimum-coverage: '80'
+          coverage-type: 'clover'
+          
+      - name: Test Cobertura Format (Pass)
+        uses: ./
+        with:
+          coverage-file: 'examples/cobertura.xml'
+          minimum-coverage: '80'
+          coverage-type: 'cobertura'
+          
+      - name: Test JaCoCo Format (Pass)
+        uses: ./
+        with:
+          coverage-file: 'examples/jacoco.xml'
+          minimum-coverage: '80'
+          coverage-type: 'jacoco'
+          
+      - name: Test Failure Case (Should Fail)
+        id: fail-test
+        continue-on-error: true
+        uses: ./
+        with:
+          coverage-file: 'examples/clover.xml'
+          minimum-coverage: '90'
+          coverage-type: 'clover'
+          
+      - name: Verify Failure
+        if: steps.fail-test.outcome == 'success'
+        run: |
+          echo "Expected action to fail, but it passed!"
+          exit 1
+          
+      - name: Test with Outputs
+        id: coverage-test
+        uses: ./
+        with:
+          coverage-file: 'examples/clover.xml'
+          minimum-coverage: '80'
+          
+      - name: Display Results
+        run: |
+          echo "Coverage: ${{ steps.coverage-test.outputs.coverage-percentage }}%"
+          echo "Status: ${{ steps.coverage-test.outputs.status }}"

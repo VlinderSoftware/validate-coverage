@@ -1,0 +1,48 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build Docker Image",
+			"type": "shell",
+			"command": "docker",
+			"args": [
+				"build",
+				"-t",
+				"validate-coverage",
+				"."
+			],
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Test Coverage Script",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-c",
+				"./validate-coverage.sh examples/clover.xml 80"
+			],
+			"group": "test",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Test Docker Action",
+			"type": "shell",
+			"command": "docker",
+			"args": [
+				"run",
+				"--rm",
+				"-v",
+				"${workspaceFolder}/examples:/workspace",
+				"validate-coverage",
+				"/workspace/clover.xml",
+				"80"
+			],
+			"group": "test",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<coverage line-rate="0.85" branch-rate="0.80" version="1.9" timestamp="1691234567">
+  <sources>
+    <source>src</source>
+  </sources>
+  <packages>
+    <package name="" line-rate="0.85" branch-rate="0.80">
+      <classes>
+        <class name="example.py" filename="example.py" line-rate="0.85" branch-rate="0.80">
+          <methods/>
+          <lines>
+            <line number="1" hits="1"/>
+            <line number="2" hits="1"/>
+            <line number="3" hits="0"/>
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>

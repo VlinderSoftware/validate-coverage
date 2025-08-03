@@ -87,10 +87,20 @@ jobs:
     name: Test GitHub Action Interface
     # Only test the action interface if Docker image is available (release branches)
     if: startsWith(github.ref, 'refs/heads/release/') || github.event_name == 'pull_request' && startsWith(github.head_ref, 'release/')
+    permissions:
+      contents: read
+      packages: read
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         
       - name: Test Clover Format (Pass)
         uses: ./

@@ -203,16 +203,44 @@ jobs:
 
 ## Development
 
-To test this action locally:
+### Local Testing
 
 ```bash
-# Build the Docker image
+# Test the script directly
+./validate-coverage.sh examples/clover.xml 80
+
+# Build and test Docker image
+./scripts/test-docker.sh
+
+# Build Docker image manually
 docker build -t validate-coverage .
 
 # Test with a sample coverage file
-docker run --rm -v $(pwd):/workspace validate-coverage \
-  coverage/clover.xml 80 clover .
+docker run --rm -v $(pwd)/examples:/workspace validate-coverage \
+  /workspace/clover.xml 80 clover
 ```
+
+### Publishing
+
+```bash
+# Manual publish to GHCR (for initial setup)
+./scripts/publish-docker.sh
+
+# Create a release (automated pipeline)
+./scripts/create-release.sh 1.0.0
+```
+
+**Important**: The release script automatically updates action.yml to reference the specific version Docker image (e.g., `ghcr.io/vlindersoftware/validate-coverage:v1.0.0`), ensuring reproducible releases.
+
+### VS Code Tasks
+
+The project includes VS Code tasks for development:
+- **Build Docker Image**: Builds the Docker container
+- **Test Coverage Script**: Tests the script directly
+- **Test Docker Action**: Tests the Docker action
+- **Test Docker (All Formats)**: Comprehensive Docker testing
+- **Publish Docker to GHCR**: Manual publish to registry
+- **Create Release**: Streamlined release creation
 
 ## Contributing
 

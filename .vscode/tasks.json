@@ -18,10 +18,10 @@
 		{
 			"label": "Test Coverage Script",
 			"type": "shell",
-			"command": "bash",
+			"command": "./validate-coverage.sh",
 			"args": [
-				"-c",
-				"./validate-coverage.sh examples/clover.xml 80"
+				"examples/clover.xml",
+				"80"
 			],
 			"group": "test",
 			"isBackground": false,
@@ -42,7 +42,43 @@
 			],
 			"group": "test",
 			"isBackground": false,
+			"problemMatcher": [],
+			"dependsOn": "Build Docker Image"
+		},
+		{
+			"label": "Test Docker (All Formats)",
+			"type": "shell",
+			"command": "./scripts/test-docker.sh",
+			"group": "test",
+			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Publish Docker to GHCR",
+			"type": "shell",
+			"command": "./scripts/publish-docker.sh",
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Create Release",
+			"type": "shell",
+			"command": "./scripts/create-release.sh",
+			"args": [
+				"${input:version}"
+			],
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	],
+	"inputs": [
+		{
+			"id": "version",
+			"description": "Enter version number (e.g., 1.0.0)",
+			"default": "1.0.0",
+			"type": "promptString"
 		}
 	]
 }

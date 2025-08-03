@@ -1,15 +1,86 @@
-name: Test Coverage Validation Action
+name: Test and Validate
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, 'release/v*' ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, 'release/v*' ]
 
 jobs:
+  test-script:
+    runs-on: ubuntu-latest
+    name: Test Script Directly
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Make script executable
+        run: chmod +x validate-coverage.sh
+        
+      - name: Test Clover format
+        run: ./validate-coverage.sh examples/clover.xml 80 clover
+        
+      - name: Test Cobertura format  
+        run: ./validate-coverage.sh examples/cobertura.xml 80 cobertura
+        
+      - name: Test JaCoCo format
+        run: ./validate-coverage.sh examples/jacoco.xml 80 jacoco
+        
+      - name: Test failure case
+        run: |
+          if ./validate-coverage.sh examples/clover.xml 90 clover; then
+            echo "Expected failure but got success"
+            exit 1
+          else
+            echo "Correctly failed with insufficient coverage"
+          fi
+
+  test-docker:
+    runs-on: ubuntu-latest
+    name: Test Docker Build
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          load: true
+          tags: validate-coverage:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Test Docker image with Clover
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/examples:/workspace \
+            validate-coverage:test \
+            /workspace/clover.xml 80 clover
+            
+      - name: Test Docker image with Cobertura
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/examples:/workspace \
+            validate-coverage:test \
+            /workspace/cobertura.xml 80 cobertura
+            
+      - name: Test Docker image with JaCoCo
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/examples:/workspace \
+            validate-coverage:test \
+            /workspace/jacoco.xml 80 jacoco
+
   test-action:
     runs-on: ubuntu-latest
-    name: Test Coverage Validation
+    name: Test GitHub Action Interface
+    if: github.event_name == 'pull_request'
     
     steps:
       - name: Checkout
@@ -48,6 +119,27 @@ jobs:
       - name: Verify Failure
         if: steps.fail-test.outcome == 'success'
         run: |
+          echo "Expected failure but got success"
+          exit 1
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint and Validate
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Lint shell script
+        run: |
+          sudo apt-get update
+          sudo apt-get install shellcheck
+          shellcheck validate-coverage.sh
+          
+      - name: Validate action.yml
+        run: |
+          # Basic YAML validation
+          python3 -c "import yaml; yaml.safe_load(open('action.yml'))"
           echo "Expected action to fail, but it passed!"
           exit 1
           

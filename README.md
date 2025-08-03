@@ -20,6 +20,16 @@ A fast, Docker-based GitHub Action for validating test coverage from XML files a
 
 ## Usage
 
+### Versioning
+
+This action follows semantic versioning with convenience tags:
+
+- `@v1` - Latest v1.x.x release (gets all updates, including new features)
+- `@v1.0` - Latest v1.0.x release (gets patch updates only)
+- `@v1.0.4` - Exact version (no automatic updates)
+
+**Recommended:** Use `@v1` for most use cases to get the latest improvements and security updates.
+
 ### Basic Usage
 
 ```yaml
@@ -107,7 +117,7 @@ jobs:
         run: npm run test:coverage
         
       - name: Validate Coverage
-        uses: VlinderSoftware/validate-coverage@v1
+        uses: vlindersoftware/validate-coverage@v1
         with:
           coverage-file: 'coverage/clover.xml'
           minimum-coverage: '80'
@@ -138,7 +148,7 @@ jobs:
         run: pytest --cov=src --cov-report=xml
         
       - name: Validate Coverage
-        uses: VlinderSoftware/validate-coverage@v1
+        uses: vlindersoftware/validate-coverage@v1
         with:
           coverage-file: 'coverage.xml'
           minimum-coverage: '85'
@@ -167,7 +177,7 @@ jobs:
         run: ./mvnw test jacoco:report
         
       - name: Validate Coverage
-        uses: VlinderSoftware/validate-coverage@v1
+        uses: vlindersoftware/validate-coverage@v1
         with:
           coverage-file: 'target/site/jacoco/jacoco.xml'
           minimum-coverage: '75'
@@ -195,7 +205,7 @@ jobs:
 **After:**
 ```yaml
 - name: Validate coverage
-  uses: VlinderSoftware/validate-coverage@v1
+  uses: vlindersoftware/validate-coverage@v1
   with:
     coverage-file: 'coverage/clover.xml'
     minimum-coverage: '80'

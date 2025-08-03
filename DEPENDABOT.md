@@ -24,9 +24,10 @@ Dependabot PRs will be automatically merged when:
 On release branches (`release/v*`):
 - When a Dependabot PR is auto-merged, a new patch version is automatically created
 - Example: If on `release/v1` branch and current latest tag is `v1.0.3`, merging a dependency update creates `v1.0.4`
+- **Multiple tags are created**: `v1.0.4`, `v1.0`, and `v1` (convenience tags)
 - The `action.yml` file is updated to reference the new version tag
 - A GitHub release is automatically created
-- Docker image is built and published with the new tag
+- Docker image is built and published with all tags
 
 ### Security Updates
 - Security-related PRs get special treatment with `security` and `priority-high` labels
@@ -84,6 +85,26 @@ To set up Dependabot auto-merge for this repository:
 3. **Auto-merge**: PRs merge automatically when tests pass
 4. **Patch Bumping**: Each merge creates a new patch version (e.g., v1.0.0 → v1.0.1)
 5. **Docker Publishing**: New Docker images published automatically
+
+### Tag Conventions
+
+The system creates multiple tags for each release to provide flexibility:
+
+- **Full version**: `v1.0.4` (exact version)
+- **Minor version**: `v1.0` (latest patch in the 1.0.x series)
+- **Major version**: `v1` (latest release in the 1.x.x series)
+
+**Usage examples:**
+```yaml
+# Pin to exact version (recommended for production)
+uses: vlindersoftware/validate-coverage@v1.0.4
+
+# Use latest patch in minor series (gets auto-updates)
+uses: vlindersoftware/validate-coverage@v1.0
+
+# Use latest in major series (gets all updates)
+uses: vlindersoftware/validate-coverage@v1
+```
 
 ## Manual Override
 

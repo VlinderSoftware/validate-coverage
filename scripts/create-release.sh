@@ -80,7 +80,7 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
 fi
 
 # Check for uncommitted changes
-if ! git diff-index --quiet HEAD --; then
+if ! git diff-index --quiet HEAD; then
     error "You have uncommitted changes. Please commit or stash them first."
     exit 1
 fi
@@ -89,6 +89,19 @@ fi
 if git tag | grep -q "^v$VERSION$"; then
     error "Tag v$VERSION already exists"
     exit 1
+fi
+
+# Check if any of the convenience tags already exist
+MAJOR_TAG="v$MAJOR"
+MINOR_TAG="v$MAJOR.$MINOR"
+FULL_TAG="v$VERSION"
+
+if git tag | grep -q "^$MAJOR_TAG$"; then
+    warning "Major tag $MAJOR_TAG already exists and will be updated"
+fi
+
+if git tag | grep -q "^$MINOR_TAG$"; then
+    warning "Minor tag $MINOR_TAG already exists and will be updated"
 fi
 
 # Create release branch
@@ -100,6 +113,10 @@ if git branch -r | grep -q "origin/$RELEASE_BRANCH"; then
     log "Release branch already exists, checking out"
     git checkout "$RELEASE_BRANCH"
     git pull origin "$RELEASE_BRANCH"
+    
+    # Merge latest changes from main to keep release branch up to date
+    log "Merging latest changes from main into release branch"
+    git merge main --no-edit
 else
     log "Creating new release branch"
     git checkout -b "$RELEASE_BRANCH"
@@ -121,25 +138,53 @@ fi
 log "Pushing release branch"
 git push -u origin "$RELEASE_BRANCH"
 
-# Create and push tag
-log "Creating tag v$VERSION"
-git tag "v$VERSION"
-git push origin "v$VERSION"
+# Create and push tags (v1, v1.0, v1.0.0)
+log "Creating tags: $MAJOR_TAG, $MINOR_TAG, $FULL_TAG"
+
+# Create the full version tag
+git tag "$FULL_TAG"
+
+# Delete existing major/minor tags if they exist (to update them)
+if git tag | grep -q "^$MAJOR_TAG$"; then
+    log "Deleting existing major tag $MAJOR_TAG"
+    git tag -d "$MAJOR_TAG" || true
+    git push origin ":refs/tags/$MAJOR_TAG" || true
+fi
+
+if git tag | grep -q "^$MINOR_TAG$"; then
+    log "Deleting existing minor tag $MINOR_TAG"
+    git tag -d "$MINOR_TAG" || true
+    git push origin ":refs/tags/$MINOR_TAG" || true
+fi
+
+# Create major and minor tags
+git tag "$MAJOR_TAG"
+git tag "$MINOR_TAG"
+
+# Push all tags
+log "Pushing tags to origin"
+git push origin "$FULL_TAG"
+git push origin "$MAJOR_TAG"
+git push origin "$MINOR_TAG"
 
 success "Release v$VERSION created successfully!"
+success "Created and pushed tags:"
+success "  - $FULL_TAG (full version)"
+success "  - $MINOR_TAG (minor version convenience tag)"
+success "  - $MAJOR_TAG (major version convenience tag)"
+success ""
 success "GitHub Actions will now:"
 success "  1. Build and push Docker image to GHCR with tags:"
-success "     - ghcr.io/vlindersoftware/validate-coverage:v$VERSION"
-success "     - ghcr.io/vlindersoftware/validate-coverage:v$MAJOR.$MINOR"
-success "     - ghcr.io/vlindersoftware/validate-coverage:v$MAJOR"
+success "     - ghcr.io/vlindersoftware/validate-coverage:$FULL_TAG"
+success "     - ghcr.io/vlindersoftware/validate-coverage:$MINOR_TAG"
+success "     - ghcr.io/vlindersoftware/validate-coverage:$MAJOR_TAG"
 success "     - ghcr.io/vlindersoftware/validate-coverage:latest"
 success "  2. Create GitHub release"
-success "  3. Update major (v$MAJOR) and minor (v$MAJOR.$MINOR) tags"
 success ""
 success "The action.yml now references: ghcr.io/vlindersoftware/validate-coverage:v$VERSION"
 success ""
 success "Monitor the release at: https://github.com/VlinderSoftware/validate-coverage/actions"
 success "Once complete, the action can be used as:"
-success "  uses: vlindersoftware/validate-coverage@v$VERSION"
-success "  uses: vlindersoftware/validate-coverage@v$MAJOR.$MINOR"
-success "  uses: vlindersoftware/validate-coverage@v$MAJOR"
+success "  uses: vlindersoftware/validate-coverage@$FULL_TAG"
+success "  uses: vlindersoftware/validate-coverage@$MINOR_TAG"
+success "  uses: vlindersoftware/validate-coverage@$MAJOR_TAG"

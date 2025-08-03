@@ -1,0 +1,44 @@
+name: Enable Auto-merge for Dependabot
+
+on:
+  pull_request:
+    types: [opened, reopened]
+    branches:
+      - main
+      - 'release/v*'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    name: Enable auto-merge for Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Enable auto-merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Enabling auto-merge for Dependabot PR #${{ github.event.pull_request.number }}"
+          gh pr merge ${{ github.event.pull_request.number }} \
+            --auto \
+            --squash \
+            --subject "${{ github.event.pull_request.title }}" \
+            --body "Auto-merged dependency update"
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const isReleaseBranch = context.payload.pull_request.base.ref.startsWith('release/');
+            const branchType = isReleaseBranch ? 'release branch' : 'main branch';
+            const patchInfo = isReleaseBranch ? '\n\n🔄 **Note:** After this PR merges, a new patch version will be automatically created.' : '';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🤖 **Auto-merge enabled** 🤖\n\nThis Dependabot PR will be automatically merged once all required checks pass.\n\n**Target:** ${branchType}${patchInfo}`
+            })

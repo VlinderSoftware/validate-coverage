@@ -1,0 +1,25 @@
+name: Release Branch PR
+
+on:
+  pull_request:
+    branches: [ 'release/v*' ]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    name: Test and Validate
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
+  build-and-test:
+    name: Build and Test Release
+    needs: test
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit

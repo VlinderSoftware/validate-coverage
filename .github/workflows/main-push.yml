@@ -1,4 +1,4 @@
-name: Build Development Image
+name: Main Branch Push
 
 on:
   push:
@@ -9,8 +9,20 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: vlindersoftware/validate-coverage
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
+  test:
+    name: Test and Validate
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
   build-dev:
+    name: Build Development Image
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,7 +43,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push development image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true

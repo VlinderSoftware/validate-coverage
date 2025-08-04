@@ -31,7 +31,7 @@ outputs:
 
 runs:
   using: 'docker'
-  image: 'ghcr.io/vlindersoftware/validate-coverage:main'
+  image: 'docker://ghcr.io/vlindersoftware/validate-coverage:main'
   args:
     - ${{ inputs.coverage-file }}
     - ${{ inputs.minimum-coverage }}

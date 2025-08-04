@@ -46,10 +46,15 @@ show_usage() {
 }
 
 # Validate input
-if [ -z "$1" ]; then
-    error "Version number is required"
-    show_usage
-    exit 1
+if [ -z "$1" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+        show_usage
+        exit 0
+    else
+        error "Version number is required"
+        show_usage
+        exit 1
+    fi
 fi
 
 VERSION="$1"
@@ -85,6 +90,31 @@ if ! git diff-index --quiet HEAD; then
     exit 1
 fi
 
+# Ensure we're on main branch and it's up to date
+CURRENT_BRANCH=$(git branch --show-current)
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    log "Switching to main branch"
+    git checkout main
+fi
+
+log "Fetching latest changes"
+git fetch origin
+
+# Check if main is behind remote
+LOCAL_MAIN=$(git rev-parse main)
+REMOTE_MAIN=$(git rev-parse origin/main)
+
+if [ "$LOCAL_MAIN" != "$REMOTE_MAIN" ]; then
+    if git merge-base --is-ancestor main origin/main; then
+        log "Updating local main branch"
+        git merge --ff-only origin/main
+    else
+        error "Local main branch has diverged from remote"
+        error "Please resolve this manually before creating a release"
+        exit 1
+    fi
+fi
+
 # Check if tag already exists
 if git tag | grep -q "^v$VERSION$"; then
     error "Tag v$VERSION already exists"
@@ -110,16 +140,73 @@ log "Creating release branch: $RELEASE_BRANCH"
 
 # Check if release branch exists
 if git branch -r | grep -q "origin/$RELEASE_BRANCH"; then
-    log "Release branch already exists, checking out"
-    git checkout "$RELEASE_BRANCH"
-    git pull origin "$RELEASE_BRANCH"
+    log "Release branch already exists, checking out and updating"
+    
+    # Fetch latest changes first
+    log "Fetching latest changes from origin"
+    git fetch origin
+    
+    # Check out the release branch
+    if git branch | grep -q "$RELEASE_BRANCH"; then
+        # Local branch exists, switch to it
+        git checkout "$RELEASE_BRANCH"
+        
+        # Check if local branch is behind remote
+        LOCAL_COMMIT=$(git rev-parse HEAD)
+        REMOTE_COMMIT=$(git rev-parse "origin/$RELEASE_BRANCH")
+        
+        if [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]; then
+            log "Local release branch is behind remote, updating"
+            # Try to fast-forward first
+            if git merge-base --is-ancestor HEAD "origin/$RELEASE_BRANCH"; then
+                log "Fast-forwarding local branch"
+                git merge --ff-only "origin/$RELEASE_BRANCH"
+            else
+                warning "Local branch has diverged from remote"
+                log "Resetting local branch to match remote (local changes will be lost)"
+                git reset --hard "origin/$RELEASE_BRANCH"
+            fi
+        else
+            log "Local release branch is up to date"
+        fi
+    else
+        # Local branch doesn't exist, create it from remote
+        log "Creating local branch from remote"
+        git checkout -b "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+    fi
     
     # Merge latest changes from main to keep release branch up to date
     log "Merging latest changes from main into release branch"
-    git merge main --no-edit
+    
+    # Fetch main branch updates
+    git fetch origin main
+    
+    # Check if there are any changes to merge
+    MAIN_COMMIT=$(git rev-parse origin/main)
+    RELEASE_COMMIT=$(git rev-parse HEAD)
+    
+    if git merge-base --is-ancestor origin/main HEAD; then
+        log "Release branch already contains all changes from main"
+    else
+        log "Merging origin/main into release branch"
+        if ! git merge origin/main --no-edit; then
+            error "Merge conflict detected while merging main into release branch"
+            error "Please resolve conflicts manually and then run:"
+            error "  git add ."
+            error "  git commit"
+            error "  $0 $VERSION"
+            exit 1
+        fi
+        log "Successfully merged main into release branch"
+    fi
 else
-    log "Creating new release branch"
-    git checkout -b "$RELEASE_BRANCH"
+    log "Creating new release branch from main"
+    
+    # Fetch latest main
+    git fetch origin main
+    
+    # Create new branch from latest main
+    git checkout -b "$RELEASE_BRANCH" origin/main
 fi
 
 # Update version references in action.yml if needed

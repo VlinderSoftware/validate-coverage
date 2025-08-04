@@ -1,4 +1,4 @@
-FROM alpine:3.18
+FROM alpine:3.22
 
 # Install required packages for coverage validation
 RUN apk add --no-cache \

@@ -3,9 +3,15 @@ name: Main Branch Push
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: vlindersoftware/validate-coverage
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   test:
@@ -13,3 +19,41 @@ jobs:
     uses: ./.github/workflows/test.yml
     permissions:
       contents: read
+
+  build-dev:
+    name: Build Development Image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push development image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test development image
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}/examples:/workspace \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main \
+            /workspace/clover.xml 80 clover

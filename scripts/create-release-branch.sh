@@ -67,7 +67,7 @@ git checkout -b "$BRANCH_NAME"
 
 # Update action.yml to use a version-specific tag instead of main
 log "Updating action.yml to use version-specific Docker image"
-INITIAL_TAG="v$MAJOR_VERSION.0.0"
+INITIAL_TAG="$MAJOR_VERSION.0.0"
 sed -i "s|image: 'docker://ghcr.io/vlindersoftware/validate-coverage:main'|image: 'docker://ghcr.io/vlindersoftware/validate-coverage:$INITIAL_TAG'|" action.yml
 
 # Commit the change

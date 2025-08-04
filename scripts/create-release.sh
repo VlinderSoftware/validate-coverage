@@ -211,10 +211,10 @@ fi
 
 # Update version references in action.yml if needed
 log "Updating action.yml image reference"
-if grep -q "ghcr.io/vlindersoftware/validate-coverage" action.yml; then
+if grep -q "docker://ghcr.io/vlindersoftware/validate-coverage" action.yml; then
     # Replace any existing version with the new version
-    sed -i "s|ghcr.io/vlindersoftware/validate-coverage:[^'\"]*|ghcr.io/vlindersoftware/validate-coverage:v$VERSION|g" action.yml
-    log "Updated action.yml to use image: ghcr.io/vlindersoftware/validate-coverage:v$VERSION"
+    sed -i "s|docker://ghcr.io/vlindersoftware/validate-coverage:[^'\"]*|docker://ghcr.io/vlindersoftware/validate-coverage:v$VERSION|g" action.yml
+    log "Updated action.yml to use image: docker://ghcr.io/vlindersoftware/validate-coverage:v$VERSION"
     git add action.yml
     git commit -m "Update action to use v$VERSION image" || true
 else
@@ -268,7 +268,7 @@ success "     - ghcr.io/vlindersoftware/validate-coverage:$MAJOR_TAG"
 success "     - ghcr.io/vlindersoftware/validate-coverage:latest"
 success "  2. Create GitHub release"
 success ""
-success "The action.yml now references: ghcr.io/vlindersoftware/validate-coverage:v$VERSION"
+success "The action.yml now references: docker://ghcr.io/vlindersoftware/validate-coverage:v$VERSION"
 success ""
 success "Monitor the release at: https://github.com/VlinderSoftware/validate-coverage/actions"
 success "Once complete, the action can be used as:"

@@ -5,8 +5,8 @@ on:
     branches: [ 'release/v*' ]
 
 permissions:
-  contents: read
-  packages: read
+  contents: write
+  packages: write
 
 jobs:
   test:
@@ -20,6 +20,6 @@ jobs:
     needs: test
     uses: ./.github/workflows/release.yml
     permissions:
-      contents: read
+      contents: write
       packages: write
     secrets: inherit

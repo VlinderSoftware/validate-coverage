@@ -12,6 +12,9 @@ jobs:
     name: Auto-merge Dependabot PR
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Auto-merge PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

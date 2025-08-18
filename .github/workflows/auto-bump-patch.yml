@@ -20,7 +20,7 @@ jobs:
       startsWith(github.event.pull_request.base.ref, 'release/v')
     steps:
       - name: Checkout release branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.base.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}

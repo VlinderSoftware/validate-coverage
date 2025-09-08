@@ -116,7 +116,7 @@ jobs:
           echo "Created and pushed tags: $NEW_TAG, $MINOR_TAG, $MAJOR_TAG"
 
       - name: Trigger Docker build for new tag
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const newTag = '${{ steps.extract-version.outputs.new_tag }}';
@@ -153,7 +153,7 @@ jobs:
           generate_release_notes: true
 
       - name: Comment on merged PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const newTag = '${{ steps.extract-version.outputs.new_tag }}';

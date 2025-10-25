@@ -7,6 +7,12 @@ on:
     branches: [main, 'release/v*']
     types: [closed]
 
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+  actions: write
+
 jobs:
   version:
     name: Version and Release
@@ -63,6 +69,7 @@ jobs:
 
       - name: Update action.yml version reference
         if: steps.check-version.outputs.version-created == 'true'
+        continue-on-error: true
         run: |
           # Update action.yml to reference the new version tag in the Docker image
           sed -i "s/image: 'docker:\/\/ghcr\.io\/vlindersoftware\/validate-coverage:.*/image: 'docker:\/\/ghcr.io\/vlindersoftware\/validate-coverage:${{ steps.version.outputs.patch-tag }}'/" action.yml
@@ -155,6 +162,10 @@ jobs:
 
       - name: Test Coverage Script
         run: |
+          # Install xmllint for testing
+          sudo apt-get update
+          sudo apt-get install -y libxml2-utils
+          
           # Test the coverage validation script
           chmod +x validate-coverage.sh
           

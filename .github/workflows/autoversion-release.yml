@@ -83,12 +83,6 @@ jobs:
             git push
           fi
 
-      - name: Trigger Docker Build and Release
-        if: steps.check-version.outputs.version-created == 'true'
-        uses: ./.github/workflows/release.yml
-        with:
-          version-tag: ${{ steps.version.outputs.patch-tag }}
-
       - name: Create GitHub Release
         if: steps.check-version.outputs.version-created == 'true'
         uses: actions/create-release@v1

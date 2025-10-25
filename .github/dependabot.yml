@@ -9,8 +9,6 @@ updates:
       time: "09:00"
     target-branch: "main"
     open-pull-requests-limit: 10
-    reviewers:
-      - "vlindersoftware"
     assignees:
       - "vlindersoftware"
     commit-message:
@@ -20,6 +18,34 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    ignore:
+      # Ignore major version updates to prevent breaking changes
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Enable version updates for GitHub Actions (dev branch)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    target-branch: "dev"
+    open-pull-requests-limit: 10
+    assignees:
+      - "vlindersoftware"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "dev-branch"
+    ignore:
+      # Ignore major version updates to prevent breaking changes
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # Enable version updates for GitHub Actions (release branches)
   - package-ecosystem: "github-actions"
@@ -29,8 +55,6 @@ updates:
       time: "09:00"
     target-branch: "release/v*"
     open-pull-requests-limit: 5
-    reviewers:
-      - "vlindersoftware"
     assignees:
       - "vlindersoftware"
     commit-message:
@@ -41,6 +65,10 @@ updates:
       - "dependencies"
       - "github-actions"
       - "release-branch"
+    ignore:
+      # Ignore major version updates to prevent breaking changes
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # Enable version updates for Docker (main branch)
   - package-ecosystem: "docker"
@@ -51,8 +79,6 @@ updates:
       time: "09:00"
     target-branch: "main"
     open-pull-requests-limit: 5
-    reviewers:
-      - "vlindersoftware"
     assignees:
       - "vlindersoftware"
     commit-message:
@@ -62,6 +88,34 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    ignore:
+      # Ignore major version updates to prevent breaking changes
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # Enable version updates for Docker (dev branch)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    target-branch: "dev"
+    open-pull-requests-limit: 5
+    assignees:
+      - "vlindersoftware"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "docker"
+      - "dev-branch"
+    ignore:
+      # Ignore major version updates to prevent breaking changes
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # Enable version updates for Docker (release branches)
   - package-ecosystem: "docker"
@@ -71,8 +125,6 @@ updates:
       time: "09:00"
     target-branch: "release/v*"
     open-pull-requests-limit: 3
-    reviewers:
-      - "vlindersoftware"
     assignees:
       - "vlindersoftware"
     commit-message:
@@ -83,3 +135,7 @@ updates:
       - "dependencies"
       - "docker"
       - "release-branch"
+    ignore:
+      # Ignore major version updates to prevent breaking changes
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

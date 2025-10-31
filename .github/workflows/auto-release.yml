@@ -81,11 +81,11 @@ jobs:
           
           echo "Will create release: v$NEW_VERSION"
 
-  update-action:
+  update-action-and-tag:
     needs: determine-version
     if: needs.determine-version.outputs.should-release == 'true'
     runs-on: ubuntu-latest
-    name: Update action.yml for Release
+    name: Update Action and Create Tag
     
     steps:
       - name: Checkout repository
@@ -110,36 +110,16 @@ jobs:
             exit 1
           fi
           
-      - name: Commit action.yml update
+      - name: Commit action.yml update and create tags
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
+          # Commit the action.yml update
           git add action.yml
           git commit -m "chore: Update action.yml to reference ${{ needs.determine-version.outputs.version }}"
-          git push
-
-  create-release-tag:
-    needs: [determine-version, update-action]
-    if: needs.determine-version.outputs.should-release == 'true'
-    runs-on: ubuntu-latest
-    name: Create Release Tag
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.ref }}  # Get the updated branch with action.yml changes
           
-      - name: Pull latest changes
-        run: git pull origin ${{ github.ref_name }}
-          
-      - name: Create and push version tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          
+          # Now create tags on this commit (which includes the updated action.yml)
           FULL_TAG="${{ needs.determine-version.outputs.full-tag }}"
           VERSION="${{ needs.determine-version.outputs.version }}"
           MAJOR="v${{ needs.determine-version.outputs.major }}"
@@ -147,28 +127,30 @@ jobs:
           
           echo "Creating tags: $FULL_TAG, $MINOR, $MAJOR"
           
-          # Create the full version tag
+          # Create the full version tag on the current commit
           git tag "$FULL_TAG" -m "Release $FULL_TAG"
           
-          # Delete and recreate convenience tags
+          # Delete and recreate convenience tags (these will point to remote)
           git tag -d "$MAJOR" 2>/dev/null || true
           git push origin ":refs/tags/$MAJOR" 2>/dev/null || true
           git tag -d "$MINOR" 2>/dev/null || true  
           git push origin ":refs/tags/$MINOR" 2>/dev/null || true
           
-          # Create convenience tags
+          # Create convenience tags on current commit
           git tag "$MAJOR" -m "Latest $MAJOR release: $FULL_TAG"
           git tag "$MINOR" -m "Latest $MINOR release: $FULL_TAG"
           
-          # Push all tags
+          # Push the commit first, then the tags
+          git push
           git push origin "$FULL_TAG"
           git push origin "$MAJOR"
           git push origin "$MINOR"
           
           echo "✅ Created and pushed tags successfully"
+          echo "🎯 All tags point to commit with updated action.yml"
 
   build-and-release:
-    needs: [determine-version, create-release-tag]
+    needs: [determine-version, update-action-and-tag]
     if: needs.determine-version.outputs.should-release == 'true'
     name: Build Docker and Create GitHub Release
     uses: ./.github/workflows/release-tags.yml

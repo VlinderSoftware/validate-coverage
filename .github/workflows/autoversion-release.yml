@@ -2,9 +2,9 @@ name: Autoversion Release
 
 on:
   push:
-    branches: [main, 'release/v*']
+    branches: [main]
   pull_request:
-    branches: [main, 'release/v*']
+    branches: [main]
     types: [closed]
 
 permissions:
@@ -18,9 +18,9 @@ jobs:
     name: Version and Release
     runs-on: ubuntu-latest
     if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/v'))) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'pull_request' && github.event.pull_request.merged == true && 
-       (github.event.pull_request.head.ref == 'main' || startsWith(github.event.pull_request.head.ref, 'release/v')) &&
+       github.event.pull_request.head.ref == 'main' &&
        github.actor == 'dependabot[bot]')
     
     steps:

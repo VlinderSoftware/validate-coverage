@@ -31,6 +31,9 @@ outputs:
 
 runs:
   using: 'docker'
+  # VERSIONING STRATEGY:
+  # - Main branch: Always use 'latest' for continuous updates
+  # - Release branches: Pin to specific version (e.g., '1.0.14' without 'v' prefix)
   image: 'docker://ghcr.io/vlindersoftware/validate-coverage:latest'
   args:
     - ${{ inputs.coverage-file }}

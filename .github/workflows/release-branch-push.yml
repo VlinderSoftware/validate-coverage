@@ -1,12 +1,12 @@
-name: Release Branch Push
+name: Release Branch Validation
 
 on:
   push:
     branches: [ 'release/v*' ]
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
+  packages: read
 
 jobs:
   test:
@@ -14,12 +14,9 @@ jobs:
     uses: ./.github/workflows/test.yml
     permissions:
       contents: read
-
-  build-and-test:
-    name: Build and Test Release
-    needs: test
-    uses: ./.github/workflows/release.yml
+      
+  validate-action:
+    name: Validate Action Configuration
+    uses: ./.github/workflows/validate-action.yml
     permissions:
-      contents: write
-      packages: write
-    secrets: inherit
+      contents: read

@@ -1,0 +1,118 @@
+name: Validate Action Configuration
+
+on:
+  push:
+    branches: [ main, 'release/*' ]
+    paths: [ 'action.yml' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'action.yml' ]
+
+jobs:
+  validate-action:
+    runs-on: ubuntu-latest
+    name: Validate action.yml Configuration
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        
+      - name: Extract Docker image from action.yml
+        id: extract
+        run: |
+          IMAGE=$(grep "image:" action.yml | sed "s/.*image: *['\"]*//" | sed "s/['\"].*//")
+          echo "Docker image: $IMAGE"
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          
+          # Extract just the tag part
+          TAG=$(echo "$IMAGE" | sed 's/.*://')
+          echo "Tag: $TAG"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          
+      - name: Validate main branch uses latest
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if [[ "${{ steps.extract.outputs.tag }}" != "latest" ]]; then
+            echo "❌ ERROR: Main branch must use 'latest' tag, found: ${{ steps.extract.outputs.tag }}"
+            echo "The main branch should always reference the latest Docker image."
+            echo "Only release branches should pin to specific versions."
+            exit 1
+          fi
+          echo "✅ Main branch correctly uses latest tag"
+          
+      - name: Validate release branch uses version tag
+        if: startsWith(github.ref, 'refs/heads/release/')
+        run: |
+          if [[ "${{ steps.extract.outputs.tag }}" == "latest" ]]; then
+            echo "❌ ERROR: Release branch should not use 'latest' tag"
+            echo "Release branches should pin to specific version tags."
+            exit 1
+          fi
+          
+          # Validate tag format (should be semver without 'v' prefix)
+          if [[ ! "${{ steps.extract.outputs.tag }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ ERROR: Invalid tag format: ${{ steps.extract.outputs.tag }}"
+            echo "Expected format: X.Y.Z (without 'v' prefix)"
+            echo "Examples: 1.0.14, 2.1.0"
+            exit 1
+          fi
+          echo "✅ Release branch correctly uses version tag: ${{ steps.extract.outputs.tag }}"
+          
+      - name: Test Docker image accessibility (if not latest)
+        if: steps.extract.outputs.tag != 'latest'
+        run: |
+          echo "Testing if Docker image exists: ${{ steps.extract.outputs.image }}"
+          
+          # Try to inspect the image manifest (this doesn't require pulling the full image)
+          if docker manifest inspect "${{ steps.extract.outputs.image }}" > /dev/null 2>&1; then
+            echo "✅ Docker image exists and is accessible"
+          else
+            echo "❌ ERROR: Docker image not found or not accessible: ${{ steps.extract.outputs.image }}"
+            echo ""
+            echo "This usually means:"
+            echo "1. The Docker image was not built/published for this tag"
+            echo "2. The tag format is incorrect (should not have 'v' prefix)"
+            echo "3. The release workflow failed to complete"
+            echo ""
+            echo "Available recent images can be checked at:"
+            echo "https://github.com/VlinderSoftware/validate-coverage/pkgs/container/validate-coverage"
+            exit 1
+          fi
+          
+      - name: Validate action syntax
+        run: |
+          # Basic YAML syntax validation
+          python3 -c "
+          import yaml
+          import sys
+          
+          try:
+              with open('action.yml', 'r') as f:
+                  action = yaml.safe_load(f)
+              
+              # Validate required fields
+              required_fields = ['name', 'description', 'inputs', 'outputs', 'runs']
+              for field in required_fields:
+                  if field not in action:
+                      print(f'❌ ERROR: Missing required field: {field}')
+                      sys.exit(1)
+              
+              # Validate runs section
+              runs = action['runs']
+              if runs.get('using') != 'docker':
+                  print('❌ ERROR: Expected runs.using to be \"docker\"')
+                  sys.exit(1)
+              
+              if 'image' not in runs:
+                  print('❌ ERROR: Missing runs.image field')
+                  sys.exit(1)
+              
+              print('✅ action.yml syntax and structure is valid')
+              
+          except yaml.YAMLError as e:
+              print(f'❌ ERROR: Invalid YAML syntax: {e}')
+              sys.exit(1)
+          except Exception as e:
+              print(f'❌ ERROR: {e}')
+              sys.exit(1)
+          "

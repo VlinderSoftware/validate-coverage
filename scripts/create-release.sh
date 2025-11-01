@@ -146,11 +146,11 @@ main() {
         local suggestions=($(suggest_versions "$current_version"))
         
         # Display patch option
-        printf "%s1)%s %-8s %s\n" "$CYAN" "$NC" "(patch)" "${suggestions[0]}"
-        printf "%s2)%s %-8s %s\n" "$CYAN" "$NC" "(minor)" "${suggestions[1]}"
-        printf "%s3)%s %-8s %s\n" "$CYAN" "$NC" "(major)" "${suggestions[2]}"
+        echo -e "${CYAN}1)${NC} (patch)  ${suggestions[0]}"
+        echo -e "${CYAN}2)${NC} (minor)  ${suggestions[1]}"
+        echo -e "${CYAN}3)${NC} (major)  ${suggestions[2]}"
         echo ""
-        printf "%s4)%s %-8s %s\n" "$CYAN" "$NC" "(custom)" "Enter custom version"
+        echo -e "${CYAN}4)${NC} (custom) Enter custom version"
         echo ""
         
         read -p "Choose option (1-4): " choice

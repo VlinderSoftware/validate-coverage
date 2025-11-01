@@ -6,6 +6,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Function to print colored log messages
@@ -25,259 +26,278 @@ error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
+prompt() {
+    echo -e "${CYAN}[PROMPT]${NC} $1"
+}
+
 show_usage() {
-    echo "Usage: $0 <version>"
+    echo "Usage: $0 [version]"
     echo ""
     echo "Creates a new release for the validate-coverage action."
     echo ""
     echo "Parameters:"
-    echo "  version    Version number in semver format (e.g., 1.2.3)"
+    echo "  version    Optional. Version number in semver format (e.g., 1.2.3)"
+    echo "             If not provided, script will suggest next versions"
     echo ""
     echo "Examples:"
-    echo "  $0 1.0.0    # Creates v1.0.0 release"
-    echo "  $0 1.2.3    # Creates v1.2.3 release"
+    echo "  $0          # Interactive mode - suggests next versions"
+    echo "  $0 1.2.3    # Creates v1.2.3 release directly"
     echo ""
-    echo "Process:"
-    echo "  1. Creates release/vN branch from main"
-    echo "  2. Updates version references"
-    echo "  3. Creates and pushes vX.Y.Z tag"
-    echo "  4. GitHub Actions will build and publish the Docker image"
-    echo "  5. Major (vN) and minor (vN.M) tags will be updated automatically"
+    echo "Requirements:"
+    echo "  - Must be run from main branch"
+    echo "  - Working directory must be clean"
+    echo "  - Main branch must be up to date with origin"
 }
 
-# Validate input
-if [ -z "$1" ] || [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-    if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-        show_usage
-        exit 0
-    else
-        error "Version number is required"
-        show_usage
-        exit 1
-    fi
-fi
+# Function to get the latest version tag
+get_latest_version() {
+    git tag -l 'v*.*.*' | sort -V | tail -n 1 | sed 's/^v//'
+}
 
-VERSION="$1"
-
-# Validate version format (semver)
-if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    error "Version must be in semver format (e.g., 1.2.3)"
-    exit 1
-fi
-
-# Extract version parts
-MAJOR=$(echo "$VERSION" | cut -d. -f1)
-MINOR=$(echo "$VERSION" | cut -d. -f2)
-PATCH=$(echo "$VERSION" | cut -d. -f3)
-
-log "Preparing release v$VERSION"
-log "Major: $MAJOR, Minor: $MINOR, Patch: $PATCH"
-
-# Check if we're on main branch
-CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" != "main" ]; then
-    warning "You are not on the main branch (current: $CURRENT_BRANCH)"
-    read -p "Continue anyway? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-fi
-
-# Check for uncommitted changes
-if ! git diff-index --quiet HEAD; then
-    error "You have uncommitted changes. Please commit or stash them first."
-    exit 1
-fi
-
-# Ensure we're on main branch and it's up to date
-CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" != "main" ]; then
-    log "Switching to main branch"
-    git checkout main
-fi
-
-log "Fetching latest changes"
-git fetch origin
-
-# Check if main is behind remote
-LOCAL_MAIN=$(git rev-parse main)
-REMOTE_MAIN=$(git rev-parse origin/main)
-
-if [ "$LOCAL_MAIN" != "$REMOTE_MAIN" ]; then
-    if git merge-base --is-ancestor main origin/main; then
-        log "Updating local main branch"
-        git merge --ff-only origin/main
-    else
-        error "Local main branch has diverged from remote"
-        error "Please resolve this manually before creating a release"
-        exit 1
-    fi
-fi
-
-# Check if tag already exists
-if git tag | grep -q "^v$VERSION$"; then
-    error "Tag v$VERSION already exists"
-    exit 1
-fi
-
-# Check if any of the convenience tags already exist
-MAJOR_TAG="v$MAJOR"
-MINOR_TAG="v$MAJOR.$MINOR"
-FULL_TAG="v$VERSION"
-
-if git tag | grep -q "^$MAJOR_TAG$"; then
-    warning "Major tag $MAJOR_TAG already exists and will be updated"
-fi
-
-if git tag | grep -q "^$MINOR_TAG$"; then
-    warning "Minor tag $MINOR_TAG already exists and will be updated"
-fi
-
-# Create release branch
-RELEASE_BRANCH="release/v$MAJOR"
-log "Creating release branch: $RELEASE_BRANCH"
-
-# Check if release branch exists
-if git branch -r | grep -q "origin/$RELEASE_BRANCH"; then
-    log "Release branch already exists, checking out and updating"
+# Function to suggest next versions
+suggest_versions() {
+    local current_version="$1"
     
-    # Fetch latest changes first
-    log "Fetching latest changes from origin"
+    if [ -z "$current_version" ]; then
+        echo "1.0.0"
+        return
+    fi
+    
+    local major=$(echo "$current_version" | cut -d. -f1)
+    local minor=$(echo "$current_version" | cut -d. -f2)
+    local patch=$(echo "$current_version" | cut -d. -f3)
+    
+    echo "patch $major.$minor.$((patch + 1))"
+    echo "minor $major.$((minor + 1)).0"
+    echo "major $((major + 1)).0.0"
+}
+
+# Function to check if on main branch
+check_main_branch() {
+    local current_branch=$(git branch --show-current)
+    if [ "$current_branch" != "main" ]; then
+        error "This script must be run from the main branch"
+        error "Current branch: $current_branch"
+        error "Please run: git checkout main"
+        exit 1
+    fi
+}
+
+# Function to check working directory is clean
+check_clean_working_dir() {
+    if ! git diff-index --quiet HEAD; then
+        error "You have uncommitted changes. Please commit or stash them first."
+        git status --short
+        exit 1
+    fi
+}
+
+# Function to ensure main is up to date
+ensure_main_updated() {
+    log "Fetching latest changes from origin..."
     git fetch origin
     
-    # Check out the release branch
-    if git branch | grep -q "$RELEASE_BRANCH"; then
-        # Local branch exists, switch to it
-        git checkout "$RELEASE_BRANCH"
-        
-        # Check if local branch is behind remote
-        LOCAL_COMMIT=$(git rev-parse HEAD)
-        REMOTE_COMMIT=$(git rev-parse "origin/$RELEASE_BRANCH")
-        
-        if [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]; then
-            log "Local release branch is behind remote, updating"
-            # Try to fast-forward first
-            if git merge-base --is-ancestor HEAD "origin/$RELEASE_BRANCH"; then
-                log "Fast-forwarding local branch"
-                git merge --ff-only "origin/$RELEASE_BRANCH"
-            else
-                warning "Local branch has diverged from remote"
-                log "Resetting local branch to match remote (local changes will be lost)"
-                git reset --hard "origin/$RELEASE_BRANCH"
-            fi
+    local local_main=$(git rev-parse main)
+    local remote_main=$(git rev-parse origin/main)
+    
+    if [ "$local_main" != "$remote_main" ]; then
+        if git merge-base --is-ancestor main origin/main; then
+            log "Updating local main branch..."
+            git merge --ff-only origin/main
         else
-            log "Local release branch is up to date"
-        fi
-    else
-        # Local branch doesn't exist, create it from remote
-        log "Creating local branch from remote"
-        git checkout -b "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
-    fi
-    
-    # Merge latest changes from main to keep release branch up to date
-    log "Merging latest changes from main into release branch"
-    
-    # Fetch main branch updates
-    git fetch origin main
-    
-    # Check if there are any changes to merge
-    MAIN_COMMIT=$(git rev-parse origin/main)
-    RELEASE_COMMIT=$(git rev-parse HEAD)
-    
-    if git merge-base --is-ancestor origin/main HEAD; then
-        log "Release branch already contains all changes from main"
-    else
-        log "Merging origin/main into release branch"
-        if ! git merge origin/main --no-edit; then
-            error "Merge conflict detected while merging main into release branch"
-            error "Please resolve conflicts manually and then run:"
-            error "  git add ."
-            error "  git commit"
-            error "  $0 $VERSION"
+            error "Local main branch has diverged from remote"
+            error "Please resolve this manually before creating a release"
             exit 1
         fi
-        log "Successfully merged main into release branch"
     fi
-else
-    log "Creating new release branch from main"
-    
-    # Fetch latest main
-    git fetch origin main
-    
-    # Create new branch from latest main
-    git checkout -b "$RELEASE_BRANCH" origin/main
-fi
+}
 
-# Update version references in action.yml if needed
-log "Updating action.yml image reference"
-if grep -q "docker://ghcr.io/vlindersoftware/validate-coverage" action.yml; then
-    # Replace any existing version with the new version (without v prefix for GHCR Docker tags)
+# Main script logic
+main() {
+    echo ""
+    log "🚀 Validate Coverage Release Script"
+    echo ""
+    
+    # Initial checks
+    check_main_branch
+    check_clean_working_dir
+    ensure_main_updated
+    
+    # Get current version
+    local current_version=$(get_latest_version)
+    if [ -n "$current_version" ]; then
+        log "Current version: v$current_version"
+    else
+        log "No previous versions found"
+    fi
+    
+    # Handle version selection
+    local VERSION
+    if [ -n "$1" ]; then
+        # Version provided as argument
+        VERSION="$1"
+        log "Using provided version: $VERSION"
+    else
+        # Interactive mode - suggest versions
+        echo ""
+        prompt "Select next version:"
+        echo ""
+        
+        local suggestions=($(suggest_versions "$current_version"))
+        local i=1
+        for suggestion in "${suggestions[@]}"; do
+            local type=$(echo "$suggestion" | cut -d' ' -f1)
+            local version=$(echo "$suggestion" | cut -d' ' -f2)
+            printf "%s%d)%s %-8s %s\n" "$CYAN" "$i" "$NC" "($type)" "$version"
+            ((i++))
+        done
+        echo ""
+        printf "%s%d)%s %-8s %s\n" "$CYAN" "$i" "$NC" "(custom)" "Enter custom version"
+        echo ""
+        
+        read -p "Choose option (1-$i): " choice
+        echo ""
+        
+        if [[ "$choice" =~ ^[1-3]$ ]]; then
+            VERSION=$(echo "${suggestions[$((choice-1))]}" | cut -d' ' -f2)
+            local version_type=$(echo "${suggestions[$((choice-1))]}" | cut -d' ' -f1)
+            log "Selected $version_type version: $VERSION"
+        elif [ "$choice" = "$i" ]; then
+            read -p "Enter custom version (e.g., 1.2.3): " VERSION
+            log "Using custom version: $VERSION"
+        else
+            error "Invalid selection"
+            exit 1
+        fi
+    fi
+    
+    # Validate version format
+    if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        error "Version must be in semver format (e.g., 1.2.3)"
+        exit 1
+    fi
+    
+    # Check if tag already exists
+    if git tag | grep -q "^v$VERSION$"; then
+        error "Tag v$VERSION already exists"
+        exit 1
+    fi
+    
+    # Extract version parts
+    local MAJOR=$(echo "$VERSION" | cut -d. -f1)
+    local MINOR=$(echo "$VERSION" | cut -d. -f2)
+    local PATCH=$(echo "$VERSION" | cut -d. -f3)
+    
+    echo ""
+    log "Creating release v$VERSION (Major: $MAJOR, Minor: $MINOR, Patch: $PATCH)"
+    
+    # Confirm before proceeding
+    echo ""
+    read -p "Proceed with release v$VERSION? (y/N): " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log "Release cancelled"
+        exit 0
+    fi
+    
+    echo ""
+    log "Starting release process..."
+    
+    # Create release branch
+    local RELEASE_BRANCH="release/v$MAJOR"
+    log "Creating/updating release branch: $RELEASE_BRANCH"
+    
+    # Check if release branch exists remotely
+    if git ls-remote --heads origin "$RELEASE_BRANCH" | grep -q "$RELEASE_BRANCH"; then
+        log "Release branch exists, updating from main"
+        if git branch | grep -q "^[ *] $RELEASE_BRANCH$"; then
+            git checkout "$RELEASE_BRANCH"
+        else
+            git checkout -b "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+        fi
+        # Reset to main to keep it in sync
+        git reset --hard origin/main
+    else
+        log "Creating new release branch from main"
+        git checkout -b "$RELEASE_BRANCH"
+    fi
+    
+    # Update action.yml to reference the specific version
+    log "Updating action.yml to reference version $VERSION"
     sed -i "s|docker://ghcr.io/vlindersoftware/validate-coverage:[^'\"]*|docker://ghcr.io/vlindersoftware/validate-coverage:$VERSION|g" action.yml
-    log "Updated action.yml to use image: docker://ghcr.io/vlindersoftware/validate-coverage:$VERSION"
+    
     git add action.yml
-    git commit -m "chore: Update action.yml to reference $VERSION" || true
-else
-    warning "No GHCR image reference found in action.yml"
+    git commit -m "chore: Update action.yml to reference $VERSION"
+    
+    # Push release branch
+    log "Pushing release branch"
+    git push origin "$RELEASE_BRANCH" --force
+    
+    # Create tags
+    local MAJOR_TAG="v$MAJOR"
+    local MINOR_TAG="v$MAJOR.$MINOR"
+    local FULL_TAG="v$VERSION"
+    
+    log "Creating tags: $FULL_TAG, $MINOR_TAG, $MAJOR_TAG"
+    
+    # Delete existing convenience tags if they exist
+    for tag in "$MAJOR_TAG" "$MINOR_TAG"; do
+        if git tag | grep -q "^$tag$"; then
+            git tag -d "$tag" 2>/dev/null || true
+            git push origin ":refs/tags/$tag" 2>/dev/null || true
+        fi
+    done
+    
+    # Create all tags on current commit
+    git tag "$FULL_TAG"
+    git tag "$MINOR_TAG"
+    git tag "$MAJOR_TAG"
+    
+    # Push all tags
+    log "Pushing tags"
+    git push origin "$FULL_TAG" "$MINOR_TAG" "$MAJOR_TAG"
+    
+    # Switch back to main and ensure action.yml uses latest
+    log "Switching back to main branch"
+    git checkout main
+    
+    log "Ensuring action.yml on main uses 'latest'"
+    sed -i "s|docker://ghcr.io/vlindersoftware/validate-coverage:[^'\"]*|docker://ghcr.io/vlindersoftware/validate-coverage:latest|g" action.yml
+    
+    if ! git diff-index --quiet HEAD; then
+        git add action.yml
+        git commit -m "chore: Reset action.yml to use latest on main"
+        git push origin main
+    fi
+    
+    echo ""
+    success "🎉 Release v$VERSION created successfully!"
+    echo ""
+    success "✅ Created and pushed:"
+    success "   • Release branch: $RELEASE_BRANCH"
+    success "   • Tags: $FULL_TAG, $MINOR_TAG, $MAJOR_TAG"
+    success "   • Updated action.yml on release branch"
+    success "   • Reset action.yml to 'latest' on main"
+    echo ""
+    success "📦 GitHub Actions will now build and publish:"
+    success "   • Docker images with version tags"
+    success "   • GitHub release with notes"
+    echo ""
+    success "🔍 Monitor progress at:"
+    success "   https://github.com/vlindersoftware/validate-coverage/actions"
+    echo ""
+    success "📋 Once complete, the action can be used as:"
+    success "   uses: vlindersoftware/validate-coverage@v$VERSION"
+    success "   uses: vlindersoftware/validate-coverage@v$MAJOR.$MINOR"  
+    success "   uses: vlindersoftware/validate-coverage@v$MAJOR"
+    echo ""
+}
+
+# Parse command line arguments
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    show_usage
+    exit 0
 fi
 
-# Push release branch
-log "Pushing release branch"
-git push -u origin "$RELEASE_BRANCH"
-
-# Create and push tags (v1, v1.0, v1.0.0)
-log "Creating tags: $MAJOR_TAG, $MINOR_TAG, $FULL_TAG"
-
-# Create the full version tag
-git tag "$FULL_TAG"
-
-# Delete existing major/minor tags if they exist (to update them)
-if git tag | grep -q "^$MAJOR_TAG$"; then
-    log "Deleting existing major tag $MAJOR_TAG"
-    git tag -d "$MAJOR_TAG" || true
-    git push origin ":refs/tags/$MAJOR_TAG" || true
-fi
-
-if git tag | grep -q "^$MINOR_TAG$"; then
-    log "Deleting existing minor tag $MINOR_TAG"
-    git tag -d "$MINOR_TAG" || true
-    git push origin ":refs/tags/$MINOR_TAG" || true
-fi
-
-# Create major and minor tags
-git tag "$MAJOR_TAG"
-git tag "$MINOR_TAG"
-
-# Push all tags
-log "Pushing tags to origin"
-git push origin "$FULL_TAG"
-git push origin "$MAJOR_TAG"
-git push origin "$MINOR_TAG"
-
-success "Release v$VERSION created successfully!"
-success "Created and pushed tags:"
-success "  - $FULL_TAG (full version)"
-success "  - $MINOR_TAG (minor version convenience tag)"
-success "  - $MAJOR_TAG (major version convenience tag)"
-success ""
-success "GitHub Actions will now:"
-success "  1. Build and push Docker image to GHCR with tags:"
-success "     - ghcr.io/vlindersoftware/validate-coverage:$FULL_TAG"
-success "     - ghcr.io/vlindersoftware/validate-coverage:$MINOR_TAG"
-success "     - ghcr.io/vlindersoftware/validate-coverage:$MAJOR_TAG"
-success "     - ghcr.io/vlindersoftware/validate-coverage:latest"
-success "  2. Create GitHub release"
-success ""
-success "The action.yml now references: docker://ghcr.io/vlindersoftware/validate-coverage:$VERSION"
-success ""
-success "⚠️  IMPORTANT: Verify the release completed successfully!"
-success "1. Monitor the release workflow: https://github.com/VlinderSoftware/validate-coverage/actions"
-success "2. Verify Docker image was published: https://github.com/VlinderSoftware/validate-coverage/pkgs/container/validate-coverage"
-success "3. Check that the image can be pulled: docker pull ghcr.io/vlindersoftware/validate-coverage:$VERSION"
-success ""
-warning "If the Docker image build fails, the action will be broken until fixed!"
-success ""
-success "Once complete, the action can be used as:"
-success "  uses: vlindersoftware/validate-coverage@$FULL_TAG"
-success "  uses: vlindersoftware/validate-coverage@$MINOR_TAG"
-success "  uses: vlindersoftware/validate-coverage@$MAJOR_TAG"
+# Run main function
+main "$@"

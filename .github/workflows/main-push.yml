@@ -10,7 +10,7 @@ env:
   IMAGE_NAME: vlindersoftware/validate-coverage
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 jobs:
@@ -57,45 +57,3 @@ jobs:
             -v ${{ github.workspace }}/examples:/workspace \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main \
             /workspace/clover.xml 80 clover
-
-  ensure-latest-version:
-    name: Ensure Main Uses Latest
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          
-      - name: Check and fix action.yml version
-        run: |
-          # Check if action.yml is using latest
-          if grep -q "docker://ghcr.io/vlindersoftware/validate-coverage:latest" action.yml; then
-            echo "✅ action.yml correctly uses latest tag"
-          else
-            echo "🔧 Updating action.yml to use latest tag"
-            
-            # Update to latest
-            sed -i "s|docker://ghcr.io/vlindersoftware/validate-coverage:[^'\"]*|docker://ghcr.io/vlindersoftware/validate-coverage:latest|g" action.yml
-            
-            # Verify the change
-            if grep -q "docker://ghcr.io/vlindersoftware/validate-coverage:latest" action.yml; then
-              echo "✅ Successfully updated action.yml to use latest"
-              
-              # Commit the change
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
-              
-              git add action.yml
-              git commit -m "chore: Reset action.yml to use latest on main branch"
-              git push
-              
-              echo "✅ Committed action.yml update"
-            else
-              echo "❌ Failed to update action.yml"
-              exit 1
-            fi
-          fi

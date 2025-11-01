@@ -7,15 +7,11 @@ on:
   pull_request:
     branches: [ main ]
     paths: [ 'action.yml' ]
-  # Don't run on pushes made by github-actions bot to avoid infinite loops
-  # The auto-release workflow will validate before making changes
 
 jobs:
   validate-action:
     runs-on: ubuntu-latest
     name: Validate action.yml Configuration
-    # Skip if this is an automated commit from github-actions
-    if: github.actor != 'github-actions[bot]'
     
     steps:
       - name: Checkout repository

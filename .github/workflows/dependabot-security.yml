@@ -1,57 +1,54 @@
-name: Dependabot Security Updates
+name: Dependabot Security Priority
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches:
-      - main
-      - 'release/v*'
+    branches: [ main ]
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
 
 jobs:
-  security-updates:
-    name: Handle Dependabot Security Updates
+  security-priority:
+    name: Mark Security Updates as Priority
     runs-on: ubuntu-latest
     if: |
       github.actor == 'dependabot[bot]' && 
-      contains(github.event.pull_request.title, 'security')
+      (contains(github.event.pull_request.title, 'security') ||
+       contains(github.event.pull_request.title, 'vulnerability') ||
+       contains(github.event.pull_request.title, 'CVE-'))
+    
     steps:
-      - name: Add priority label
+      - name: Add priority labels
         uses: actions/github-script@v8
         with:
           script: |
-            github.rest.issues.addLabels({
+            await github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              labels: ['security', 'priority-high']
-            })
+              labels: ['security', 'priority-critical', 'dependencies']
+            });
 
-      - name: Comment on security update
+      - name: Add priority comment
         uses: actions/github-script@v8
         with:
           script: |
-            const isReleaseBranch = context.payload.pull_request.base.ref.startsWith('release/');
-            const branchType = isReleaseBranch ? 'release branch' : 'main branch';
-            const patchInfo = isReleaseBranch ? '\n\n🔄 **Patch Version:** A new patch version will be automatically created after merge.' : '';
+            const message = `🚨 **CRITICAL SECURITY UPDATE** 🚨
+
+            This PR addresses a security vulnerability and has been marked as critical priority.
             
-            github.rest.issues.createComment({
+            **Automatic handling:**
+            - ⚡ Will be auto-merged once all checks pass
+            - 🚀 Patch release will be created immediately after merge
+            - 📦 New Docker images will be published with the security fix
+            
+            **Timeline:** This update will be processed as quickly as possible to address the security issue.`;
+            
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🔒 **Security Update Detected** 🔒\n\nThis PR contains security updates and has been marked as high priority. It will be auto-merged once checks pass.\n\n**Target:** ${branchType}${patchInfo}`
-            })
-
-      - name: Enable auto-merge for security updates
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Enabling auto-merge for security update PR #${{ github.event.pull_request.number }}"
-          gh pr merge ${{ github.event.pull_request.number }} \
-            --auto \
-            --squash \
-            --subject "${{ github.event.pull_request.title }} [SECURITY]" \
-            --body "Auto-merged security dependency update"
+              body: message
+            });

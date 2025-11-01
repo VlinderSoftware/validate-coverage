@@ -1,32 +1,153 @@
-name: Enable Auto-merge for Dependabot
+name: Auto-merge Dependabot PRs
 
 on:
   pull_request:
-    types: [opened, reopened]
-    branches:
-      - main
-      - 'release/v*'
+    types: [opened, reopened, synchronize]
+    branches: [ main ]
 
 permissions:
   contents: write
   pull-requests: write
+  checks: read
 
 jobs:
-  enable-auto-merge:
-    name: Enable auto-merge for Dependabot PRs
+  auto-merge-dependabot:
+    name: Auto-merge Dependabot PRs
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
+    
     steps:
+      - name: Check PR details
+        id: pr-check
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title.toLowerCase();
+            
+            // Check if this is a major version update (should not auto-merge)
+            const isMajorUpdate = title.includes('major') || 
+                                  title.match(/\d+\.0\.0/) ||
+                                  title.includes('breaking');
+            
+            // Check if this is a security update (priority auto-merge)
+            const isSecurityUpdate = title.includes('security') || 
+                                      title.includes('vulnerability') ||
+                                      title.includes('cve-');
+            
+            // Check if PR is from dependabot and is minor/patch
+            const isDependabotUpdate = pr.user.login === 'dependabot[bot]';
+            const shouldAutoMerge = isDependabotUpdate && !isMajorUpdate;
+            
+            console.log(`PR Title: ${pr.title}`);
+            console.log(`Is Major Update: ${isMajorUpdate}`);
+            console.log(`Is Security Update: ${isSecurityUpdate}`);
+            console.log(`Should Auto-merge: ${shouldAutoMerge}`);
+            
+            return {
+              shouldAutoMerge,
+              isSecurityUpdate,
+              isMajorUpdate,
+              prNumber: pr.number,
+              title: pr.title
+            };
+            
+      - name: Add labels
+        if: fromJSON(steps.pr-check.outputs.result).shouldAutoMerge
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { shouldAutoMerge, isSecurityUpdate, isMajorUpdate } = ${{ steps.pr-check.outputs.result }};
+            
+            const labels = ['dependencies', 'auto-merge'];
+            
+            if (isSecurityUpdate) {
+              labels.push('security', 'priority-high');
+            }
+            
+            await github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: labels
+            });
+            
+      - name: Comment on PR
+        if: fromJSON(steps.pr-check.outputs.result).shouldAutoMerge
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { isSecurityUpdate, title } = ${{ steps.pr-check.outputs.result }};
+            
+            const securityNote = isSecurityUpdate 
+              ? '🔒 **Security Update** - This will be merged with high priority.\\n\\n'
+              : '';
+              
+            const message = `${securityNote}🤖 **Auto-merge Enabled**
+
+            This dependency update will be automatically merged once all checks pass.
+
+            **What happens next:**
+            1. ✅ All tests and validations must pass
+            2. 🔄 PR will be auto-merged (squash merge)
+            3. 🚀 A new patch release will be automatically created
+            4. 📦 Docker images will be built and published
+
+            *This is an automated process for non-major dependency updates.*`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
+            
+      - name: Block major updates
+        if: fromJSON(steps.pr-check.outputs.result).isMajorUpdate
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['dependencies', 'major-update', 'manual-review-required']
+            });
+            
+            const message = `🚨 **Major Update Detected**
+
+            This PR contains a major version update that requires manual review.
+
+            **Manual steps required:**
+            1. 👀 Review the CHANGELOG for breaking changes
+            2. 🧪 Test the changes locally if needed
+            3. ✅ Manually merge when ready
+            4. 🚀 Create a release manually using \`./scripts/create-release.sh\`
+
+            *Major updates are not auto-merged to prevent breaking changes.*`;
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
+            
+            core.setFailed('Major update detected - manual review required');
+            
       - name: Enable auto-merge
+        if: fromJSON(steps.pr-check.outputs.result).shouldAutoMerge
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Enabling auto-merge for Dependabot PR #${{ github.event.pull_request.number }}"
+          echo "🤖 Enabling auto-merge for Dependabot PR #${{ github.event.pull_request.number }}"
+          
+          # Enable auto-merge with squash
           gh pr merge ${{ github.event.pull_request.number }} \
             --auto \
             --squash \
             --subject "${{ github.event.pull_request.title }}" \
-            --body "Auto-merged dependency update"
+            --body "Auto-merged dependency update - patch release will be created automatically"
 
       - name: Comment on PR
         uses: actions/github-script@v8

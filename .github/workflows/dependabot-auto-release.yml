@@ -1,0 +1,158 @@
+name: Auto-release for Dependabot Updates
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/**'
+      - 'Dockerfile'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  check-dependabot-merge:
+    name: Check if Dependabot merge needs release
+    runs-on: ubuntu-latest
+    # Only run if the last commit was from dependabot
+    if: contains(github.event.head_commit.message, 'chore(deps)')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          
+      - name: Get latest version
+        id: version
+        run: |
+          # Get the latest version tag
+          LATEST_VERSION=$(git tag -l 'v*.*.*' | sort -V | tail -n 1 | sed 's/^v//')
+          
+          if [ -z "$LATEST_VERSION" ]; then
+            echo "No previous versions found, starting with 1.0.0"
+            LATEST_VERSION="1.0.0"
+          fi
+          
+          echo "Current version: $LATEST_VERSION"
+          
+          # Calculate next patch version
+          MAJOR=$(echo "$LATEST_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$LATEST_VERSION" | cut -d. -f2)
+          PATCH=$(echo "$LATEST_VERSION" | cut -d. -f3)
+          
+          NEXT_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "Next version: $NEXT_VERSION"
+          
+          echo "current=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          echo "next=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          
+      - name: Check if release is needed
+        id: check
+        run: |
+          # Check if there have been any dependency-related commits since last tag
+          LAST_TAG=$(git tag -l 'v*.*.*' | sort -V | tail -n 1)
+          
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous tags, creating first release"
+            echo "needed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check commits since last tag for dependency updates
+          COMMIT_COUNT=$(git rev-list "$LAST_TAG"..HEAD --count)
+          DEP_COMMITS=$(git log "$LAST_TAG"..HEAD --oneline --grep="chore(deps)" --grep="chore: bump" --grep="security" | wc -l)
+          
+          echo "Commits since $LAST_TAG: $COMMIT_COUNT"
+          echo "Dependency commits: $DEP_COMMITS"
+          
+          if [ "$DEP_COMMITS" -gt 0 ]; then
+            echo "Found dependency updates, release needed"
+            echo "needed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No dependency updates found, skipping release"
+            echo "needed=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Create automatic patch release
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          echo "🤖 Creating automatic patch release v${{ steps.version.outputs.next }}"
+          
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Create/update release branch
+          RELEASE_BRANCH="release/v$(echo "${{ steps.version.outputs.next }}" | cut -d. -f1)"
+          
+          echo "Creating/updating release branch: $RELEASE_BRANCH"
+          
+          # Create or checkout release branch
+          if git ls-remote --heads origin "$RELEASE_BRANCH" | grep -q "$RELEASE_BRANCH"; then
+            git checkout -B "$RELEASE_BRANCH" "origin/$RELEASE_BRANCH"
+            git reset --hard origin/main
+          else
+            git checkout -b "$RELEASE_BRANCH"
+          fi
+          
+          # Update action.yml to reference the specific version
+          sed -i "s|docker://ghcr.io/vlindersoftware/validate-coverage:[^'\"]*|docker://ghcr.io/vlindersoftware/validate-coverage:${{ steps.version.outputs.next }}|g" action.yml
+          
+          git add action.yml
+          git commit -m "chore: Update action.yml to reference ${{ steps.version.outputs.next }} [automated]"
+          
+          # Push release branch
+          git push origin "$RELEASE_BRANCH" --force
+          
+          # Create tags
+          MAJOR=$(echo "${{ steps.version.outputs.next }}" | cut -d. -f1)
+          MINOR=$(echo "${{ steps.version.outputs.next }}" | cut -d. -f2)
+          
+          FULL_TAG="v${{ steps.version.outputs.next }}"
+          MINOR_TAG="v$MAJOR.$MINOR"
+          MAJOR_TAG="v$MAJOR"
+          
+          echo "Creating tags: $FULL_TAG, $MINOR_TAG, $MAJOR_TAG"
+          
+          # Delete existing convenience tags if they exist
+          for tag in "$MAJOR_TAG" "$MINOR_TAG"; do
+            if git tag | grep -q "^$tag$"; then
+              git tag -d "$tag" 2>/dev/null || true
+              git push origin ":refs/tags/$tag" 2>/dev/null || true
+            fi
+          done
+          
+          # Create all tags on current commit
+          git tag "$FULL_TAG"
+          git tag "$MINOR_TAG"
+          git tag "$MAJOR_TAG"
+          
+          # Push all tags
+          git push origin "$FULL_TAG" "$MINOR_TAG" "$MAJOR_TAG"
+          
+          # Switch back to main and ensure action.yml uses latest
+          git checkout main
+          sed -i "s|docker://ghcr.io/vlindersoftware/validate-coverage:[^'\"]*|docker://ghcr.io/vlindersoftware/validate-coverage:latest|g" action.yml
+          
+          if ! git diff-index --quiet HEAD; then
+            git add action.yml
+            git commit -m "chore: Reset action.yml to use latest on main [automated]"
+            git push origin main
+          fi
+          
+          echo "✅ Automatic patch release v${{ steps.version.outputs.next }} created successfully!"
+          echo "🔄 Release includes dependency updates since v${{ steps.version.outputs.current }}"
+          
+      - name: Summary
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          echo "🎉 **Automatic Patch Release Created**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: v${{ steps.version.outputs.next }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous**: v${{ steps.version.outputs.current }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger**: Dependabot dependency updates" >> $GITHUB_STEP_SUMMARY
+          echo "- **Type**: Automated patch release" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The release will be built and published automatically by GitHub Actions." >> $GITHUB_STEP_SUMMARY

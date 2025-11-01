@@ -1,210 +1,119 @@
-# Release Instructions
+# Release Process
 
-This document describes how to create releases for the validate-coverage GitHub Action.
+This document describes the simplified manual release process for validate-coverage.
 
-## Release Process Overview
+## Quick Start
 
-Our release process follows semantic versioning and uses GitHub Container Registry (GHCR) to host Docker images.
-
-### Release Strategy
-
-- **Release Branches**: `release/vN` (where N is the major version)
-- **Version Tags**: Full semver tags (`v1.2.3`) trigger releases
-- **Convenience Tags**: Major (`v1`) and minor (`v1.2`) tags point to latest patch
-- **Docker Images**: Published to `ghcr.io/vlindersoftware/validate-coverage`
-
-### Version Lifecycle
-
-1. **Development**: Work happens on `main` branch
-2. **Release Branch**: Create `release/v1` for major version 1 releases
-3. **Tagging**: Create `v1.2.3` tag to trigger release
-4. **Auto-tagging**: CI automatically updates `v1` and `v1.2` tags
-5. **Publication**: Docker image published to GHCR with multiple tags
-
-## Creating a New Release
-
-### Option 1: Using the Release Script (Recommended)
+To create a new release:
 
 ```bash
-# Create a new release
+# Interactive mode (recommended)
+./scripts/create-release.sh
+
+# Direct version specification
 ./scripts/create-release.sh 1.2.3
-
-# This will:
-# 1. Create/checkout release/v1 branch
-# 2. Update version references
-# 3. Create and push v1.2.3 tag
-# 4. Trigger GitHub Actions release workflow
 ```
 
-### Option 2: Manual Process
+## Release Architecture
 
-1. **Create Release Branch** (if it doesn't exist):
-   ```bash
-   git checkout main
-   git pull origin main
-   git checkout -b release/v1
-   git push -u origin release/v1
-   ```
+### Manual-Only Releases
+- All releases are created manually using `scripts/create-release.sh`
+- No automated releases or version bumping
+- Full control over when and what gets released
 
-2. **Update Action Reference** (update action.yml):
-   ```yaml
-   runs:
-     using: 'docker'
-     image: 'ghcr.io/vlindersoftware/validate-coverage:v1.2.3'
-   ```
+### Intelligent Version Suggestions
+The script automatically suggests next versions based on semantic versioning:
+- **Patch**: `1.0.16` → `1.0.17` (bug fixes)
+- **Minor**: `1.0.16` → `1.1.0` (new features)
+- **Major**: `1.0.16` → `2.0.0` (breaking changes)
 
-3. **Commit and Tag**:
-   ```bash
-   git add action.yml
-   git commit -m "Update action to use v1.2.3 image"
-   git tag v1.2.3
-   git push origin release/v1
-   git push origin v1.2.3
-   ```
+### Branch Strategy
+- **Main branch**: Always uses `latest` Docker image in `action.yml`
+- **Release branches**: Pin to specific versions (e.g., `1.2.3`)
+- Release branches automatically track main content
 
-**Important**: The action.yml file should always reference the specific version tag (`v1.2.3`), not `latest`. The release script automatically updates this reference.
+## Requirements
 
-## Release Workflow Details
+Before running the release script:
+1. Must be on `main` branch
+2. Working directory must be clean (no uncommitted changes)
+3. Main branch must be up to date with origin
 
-The `.github/workflows/release.yml` workflow handles:
+## What the Script Does
 
-### Build Stage
-- **Triggers**: Push to `release/v*` branches or `v*.*.*` tags
-- **Actions**: 
-  - Builds Docker image
-  - Pushes to GHCR with multiple tags
-  - Runs tests against built image
+1. **Validation**: Checks branch, working directory, and upstream sync
+2. **Version Selection**: Interactive menu or direct version input
+3. **Branch Management**: Creates/updates `release/vX` branch from main
+4. **Version Pinning**: Updates `action.yml` to reference specific version
+5. **Tag Creation**: Creates `vX.Y.Z`, `vX.Y`, and `vX` tags
+6. **Main Reset**: Ensures `action.yml` on main uses `latest`
+7. **Publishing**: GitHub Actions builds and publishes Docker images
 
-### Release Stage (Tag Pushes Only)
-- **Triggers**: Only when `v*.*.*` tag is pushed
-- **Actions**:
-  - Updates major/minor version tags (e.g., `v1`, `v1.2`)
-  - Creates GitHub release with changelog
-  - Links to published Docker image
+## Release Workflow
 
-### Test Stage
-- **Matrix Testing**: Tests all coverage formats (clover, cobertura, jacoco)
-- **Validation**: Ensures Docker image works correctly
-
-## Docker Image Tags
-
-For version `v1.2.3`, the following tags are created:
-
-| Tag | Purpose | Example | Used By |
-|-----|---------|---------|---------|
-| `v1.2.3` | Specific version | `ghcr.io/vlindersoftware/validate-coverage:v1.2.3` | Release action.yml |
-| `v1.2` | Latest patch in minor | `ghcr.io/vlindersoftware/validate-coverage:v1.2` | Users with `@v1.2` |
-| `v1` | Latest minor in major | `ghcr.io/vlindersoftware/validate-coverage:v1` | Users with `@v1` |
-| `latest` | Latest overall release | `ghcr.io/vlindersoftware/validate-coverage:latest` | External references |
-| `main` | Development version | `ghcr.io/vlindersoftware/validate-coverage:main` | Development action.yml |
-
-**Important**: The action.yml in release branches always references the specific version tag (e.g., `v1.2.3`), ensuring reproducible builds and preventing unexpected updates.
-
-## Usage After Release
-
-Once released, users can reference the action in multiple ways:
-
-```yaml
-# Specific version (recommended for production)
-- uses: vlindersoftware/validate-coverage@v1.2.3
-
-# Latest in major version (gets auto-updates)
-- uses: vlindersoftware/validate-coverage@v1
-
-# Latest in minor version
-- uses: vlindersoftware/validate-coverage@v1.2
+```mermaid
+graph TD
+    A[Run ./scripts/create-release.sh] --> B[Select Version]
+    B --> C[Create/Update Release Branch]
+    C --> D[Pin action.yml to Version]
+    D --> E[Create Tags]
+    E --> F[Reset Main to Latest]
+    F --> G[GitHub Actions Build]
+    G --> H[Docker Images Published]
+    H --> I[GitHub Release Created]
 ```
 
-## Version Compatibility
+## GitHub Actions
 
-### Major Version Updates (v1 → v2)
-- **Breaking Changes**: API changes, input/output changes
-- **Migration**: Users must update workflows
-- **Branch**: Create new `release/v2` branch
+The following workflows support releases:
 
-### Minor Version Updates (v1.1 → v1.2)
-- **New Features**: Backward-compatible additions
-- **Auto-update**: Users on `@v1` get updates automatically
-- **Branch**: Use existing `release/v1` branch
+- **`release-tags.yml`**: Builds Docker images when tags are pushed
+- **`main-push.yml`**: Builds development images on main
+- **`validate-action.yml`**: Validates action.yml configuration
+- **`test.yml`**: Runs tests (reusable workflow)
 
-### Patch Version Updates (v1.1.0 → v1.1.1)
-- **Bug Fixes**: No API changes
-- **Auto-update**: Users on `@v1` or `@v1.1` get updates
-- **Branch**: Use existing `release/v1` branch
+## Usage Examples
 
-## Testing Before Release
+### Interactive Release
+```bash
+$ ./scripts/create-release.sh
 
-Before creating a release:
+🚀 Validate Coverage Release Script
 
-1. **Local Testing**:
-   ```bash
-   # Build and test locally
-   docker build -t validate-coverage .
-   ./validate-coverage.sh examples/clover.xml 80
-   ```
+Current version: v1.0.16
 
-2. **Integration Testing**:
-   ```bash
-   # Test in a real workflow (create test repository)
-   # Use the Docker image directly first
-   ```
+Select next version:
 
-3. **Format Testing**:
-   ```bash
-   # Test all supported formats
-   ./validate-coverage.sh examples/clover.xml 80 clover
-   ./validate-coverage.sh examples/cobertura.xml 80 cobertura
-   ./validate-coverage.sh examples/jacoco.xml 80 jacoco
-   ```
+1) (patch)  1.0.17
+2) (minor)  1.1.0  
+3) (major)  2.0.0
 
-## Troubleshooting Releases
+4) (custom) Enter custom version
 
-### Failed Release Build
-- Check GitHub Actions logs
-- Verify Dockerfile builds locally
-- Ensure all tests pass
+Choose option (1-4): 1
 
-### Failed Tag Update
-- Check repository permissions
-- Verify GITHUB_TOKEN has write access
-- May need to manually fix tag conflicts
+Selected patch version: 1.0.17
+Proceed with release v1.0.17? (y/N): y
+```
 
-### Failed GHCR Push
-- Verify package permissions in repository settings
-- Check if organization allows GHCR publishing
-- Verify GitHub token has `packages:write` permission
+### Direct Release
+```bash
+$ ./scripts/create-release.sh 1.2.3
 
-## Release Checklist
+🚀 Validate Coverage Release Script
 
-Before creating a release:
+Using provided version: 1.2.3
+Proceed with release v1.2.3? (y/N): y
+```
 
-- [ ] All tests pass locally
-- [ ] Docker image builds successfully
-- [ ] Version number follows semver
-- [ ] No uncommitted changes
-- [ ] On correct branch (main or release/vN)
-- [ ] Updated documentation if needed
-- [ ] Reviewed changes since last release
+## Validation
 
-After release:
-- [ ] Verify GitHub release was created
-- [ ] Confirm Docker image is in GHCR
-- [ ] Test the released action in a sample workflow
-- [ ] Update any documentation that references versions
-- [ ] Announce release if significant
+After each release:
+1. Monitor GitHub Actions: https://github.com/VlinderSoftware/validate-coverage/actions
+2. Verify Docker images: https://github.com/VlinderSoftware/validate-coverage/pkgs/container/validate-coverage
+3. Test the action: `docker pull ghcr.io/vlindersoftware/validate-coverage:1.2.3`
 
-## Security Considerations
+## Future Automation
 
-- **Token Scope**: GITHUB_TOKEN only has repository access
-- **Image Scanning**: GHCR automatically scans images for vulnerabilities
-- **Dependency Updates**: Keep Alpine base image and dependencies updated
-- **Secrets**: Never include secrets in Docker image or logs
-
-## Monitoring
-
-After releases, monitor:
-
-- **GitHub Marketplace**: Usage statistics and ratings
-- **Download Metrics**: GHCR package download counts  
-- **Issues**: User-reported bugs or feature requests
-- **Security Alerts**: Dependabot and security advisories
+Later, dependabot updates can be configured to automatically create patch releases,
+but the foundation is now solid for manual control when needed.

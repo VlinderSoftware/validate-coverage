@@ -67,9 +67,9 @@ suggest_versions() {
     local minor=$(echo "$current_version" | cut -d. -f2)
     local patch=$(echo "$current_version" | cut -d. -f3)
     
-    echo "patch $major.$minor.$((patch + 1))"
-    echo "minor $major.$((minor + 1)).0"
-    echo "major $((major + 1)).0.0"
+    echo "$major.$minor.$((patch + 1))"
+    echo "$major.$((minor + 1)).0"
+    echo "$((major + 1)).0.0"
 }
 
 # Function to check if on main branch
@@ -144,31 +144,40 @@ main() {
         echo ""
         
         local suggestions=($(suggest_versions "$current_version"))
-        local i=1
-        for suggestion in "${suggestions[@]}"; do
-            local type=$(echo "$suggestion" | cut -d' ' -f1)
-            local version=$(echo "$suggestion" | cut -d' ' -f2)
-            printf "%s%d)%s %-8s %s\n" "$CYAN" "$i" "$NC" "($type)" "$version"
-            ((i++))
-        done
+        
+        # Display patch option
+        printf "%s1)%s %-8s %s\n" "$CYAN" "$NC" "(patch)" "${suggestions[0]}"
+        printf "%s2)%s %-8s %s\n" "$CYAN" "$NC" "(minor)" "${suggestions[1]}"
+        printf "%s3)%s %-8s %s\n" "$CYAN" "$NC" "(major)" "${suggestions[2]}"
         echo ""
-        printf "%s%d)%s %-8s %s\n" "$CYAN" "$i" "$NC" "(custom)" "Enter custom version"
+        printf "%s4)%s %-8s %s\n" "$CYAN" "$NC" "(custom)" "Enter custom version"
         echo ""
         
-        read -p "Choose option (1-$i): " choice
+        read -p "Choose option (1-4): " choice
         echo ""
         
-        if [[ "$choice" =~ ^[1-3]$ ]]; then
-            VERSION=$(echo "${suggestions[$((choice-1))]}" | cut -d' ' -f2)
-            local version_type=$(echo "${suggestions[$((choice-1))]}" | cut -d' ' -f1)
-            log "Selected $version_type version: $VERSION"
-        elif [ "$choice" = "$i" ]; then
-            read -p "Enter custom version (e.g., 1.2.3): " VERSION
-            log "Using custom version: $VERSION"
-        else
-            error "Invalid selection"
-            exit 1
-        fi
+        case "$choice" in
+            1)
+                VERSION="${suggestions[0]}"
+                log "Selected patch version: $VERSION"
+                ;;
+            2)
+                VERSION="${suggestions[1]}"
+                log "Selected minor version: $VERSION"
+                ;;
+            3)
+                VERSION="${suggestions[2]}"
+                log "Selected major version: $VERSION"
+                ;;
+            4)
+                read -p "Enter custom version (e.g., 1.2.3): " VERSION
+                log "Using custom version: $VERSION"
+                ;;
+            *)
+                error "Invalid selection"
+                exit 1
+                ;;
+        esac
     fi
     
     # Validate version format

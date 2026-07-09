@@ -5,9 +5,9 @@ based on [Conventional Commits](https://www.conventionalcommits.org/) merged to 
 
 ## How it works
 
-1. Every push to `main` runs `.github/workflows/release-please.yml`. release-please
-   maintains an open "release PR" that accumulates a version bump and `CHANGELOG.md`
-   entry for the unreleased commits (`fix:` → patch, `feat:` → minor, `feat!:` /
+1. Every push to `main` runs `.github/workflows/release-please.yml`, which keeps
+   an open "release PR" that accumulates a version bump and `CHANGELOG.md` entry
+   for the unreleased commits (`fix:` → patch, `feat:` → minor, `feat!:` /
    `BREAKING CHANGE:` → major).
 2. Merging that release PR triggers release-please to tag the merge commit and
    create a GitHub Release.

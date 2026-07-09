@@ -1,110 +1,45 @@
 # Release Process
 
-This document describes the simplified manual release process for validate-coverage.
+Releases are automated by [release-please](https://github.com/googleapis/release-please)
+based on [Conventional Commits](https://www.conventionalcommits.org/) merged to `main`.
 
-## Quick Start
+## How it works
 
-To create a new release:
+1. Every push to `main` runs `.github/workflows/release-please.yml`, which keeps
+   an open "release PR" that accumulates a version bump and `CHANGELOG.md` entry
+   for the unreleased commits (`fix:` → patch, `feat:` → minor, `feat!:` /
+   `BREAKING CHANGE:` → major).
+2. Merging that release PR triggers release-please to tag the merge commit and
+   create a GitHub Release.
+3. The `pin-release-branch` job then reproduces the version-pinning step that used
+   to be done by the old `scripts/create-release.sh`:
+   - resets/creates `release/vN` (N = the new major version) from the release commit
+   - rewrites `action.yml` on that branch to pin the Docker image to the exact
+     released version instead of `:latest`
+   - force-moves the `vX.Y.Z`, `vX.Y`, and `vX` tags onto that pinned commit
+4. `cd_tag_image.yml` (unchanged) reacts to the moved `vX.Y.Z` tag and promotes the
+   already-built image to the release tags in `ghcr.io`.
 
-```bash
-# Interactive mode (recommended)
-./scripts/create-release.sh
+`main`'s `action.yml` keeps referencing `:latest`, as before — only the release
+branches and tags pin to a specific version.
 
-# Direct version specification
-./scripts/create-release.sh 1.2.3
+## Usage
+
+```yaml
+# specific version (recommended for production)
+- uses: vln-devsecops/actions-validate-coverage@v1.2.3
+
+# minor version (gets patch updates)
+- uses: vln-devsecops/actions-validate-coverage@v1.2
+
+# major version (gets all v1.x.x updates)
+- uses: vln-devsecops/actions-validate-coverage@v1
 ```
 
-## Release Architecture
+## Manual override
 
-### Manual-Only Releases
-- All releases are created manually using `scripts/create-release.sh`
-- No automated releases or version bumping
-- Full control over when and what gets released
-
-### Intelligent Version Suggestions
-The script automatically suggests next versions based on semantic versioning:
-- **Patch**: `1.0.16` → `1.0.17` (bug fixes)
-- **Minor**: `1.0.16` → `1.1.0` (new features)
-- **Major**: `1.0.16` → `2.0.0` (breaking changes)
-
-### Branch Strategy
-- **Main branch**: Always uses `latest` Docker image in `action.yml`
-- **Release branches**: Pin to specific versions (e.g., `1.2.3`)
-- Release branches automatically track main content
-
-## Requirements
-
-Before running the release script:
-1. Must be on `main` branch
-2. Working directory must be clean (no uncommitted changes)
-3. Main branch must be up to date with origin
-
-## What the Script Does
-
-1. **Validation**: Checks branch, working directory, and upstream sync
-2. **Version Selection**: Interactive menu or direct version input
-3. **Branch Management**: Creates/updates `release/vX` branch from main
-4. **Version Pinning**: Updates `action.yml` to reference specific version
-5. **Tag Creation**: Creates `vX.Y.Z`, `vX.Y`, and `vX` tags
-6. **Main Reset**: Ensures `action.yml` on main uses `latest`
-7. **Publishing**: GitHub Actions builds and publishes Docker images
-
-## Release Workflow
-
-```mermaid
-graph TD
-    A[Run ./scripts/create-release.sh] --> B[Select Version]
-    B --> C[Create/Update Release Branch]
-    C --> D[Pin action.yml to Version]
-    D --> E[Create Tags]
-    E --> F[Reset Main to Latest]
-    F --> G[GitHub Actions Build]
-    G --> H[Docker Images Published]
-    H --> I[GitHub Release Created]
-```
-
-## GitHub Actions
-
-The following workflows support releases:
-
-- **`release-tags.yml`**: Builds Docker images when tags are pushed
-- **`main-push.yml`**: Builds development images on main
-- **`validate-action.yml`**: Validates action.yml configuration
-- **`test.yml`**: Runs tests (reusable workflow)
-
-## Usage Examples
-
-### Interactive Release
-```bash
-$ ./scripts/create-release.sh
-
-🚀 Validate Coverage Release Script
-
-Current version: v1.0.16
-
-Select next version:
-
-1) (patch)  1.0.17
-2) (minor)  1.1.0  
-3) (major)  2.0.0
-
-4) (custom) Enter custom version
-
-Choose option (1-4): 1
-
-Selected patch version: 1.0.17
-Proceed with release v1.0.17? (y/N): y
-```
-
-### Direct Release
-```bash
-$ ./scripts/create-release.sh 1.2.3
-
-🚀 Validate Coverage Release Script
-
-Using provided version: 1.2.3
-Proceed with release v1.2.3? (y/N): y
-```
+A specific version can still be forced by including a `Release-As: X.Y.Z` footer in
+a commit message, which release-please picks up when computing the next release PR.
 
 ## Validation
 
@@ -112,8 +47,3 @@ After each release:
 1. Monitor GitHub Actions: https://github.com/vln-devsecops/actions-validate-coverage/actions
 2. Verify Docker images: https://github.com/vln-devsecops/actions-validate-coverage/pkgs/container/actions-validate-coverage
 3. Test the action: `docker pull ghcr.io/vln-devsecops/actions-validate-coverage:1.2.3`
-
-## Future Automation
-
-Later, dependabot updates can be configured to automatically create patch releases,
-but the foundation is now solid for manual control when needed.

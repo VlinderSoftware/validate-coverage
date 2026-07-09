@@ -1,0 +1,72 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+
+  # main's action.yml always points at the ':latest' image; release/vN
+  # branches pin action.yml to the exact released version so that
+  # `uses: ...@vX.Y.Z` (and the floating @vX / @vX.Y tags) resolve to a
+  # reproducible image instead of drifting with 'latest'. This job
+  # reproduces what scripts/create-release.sh used to do by hand, but
+  # driven by release-please's version instead of a manual prompt.
+  pin-release-branch:
+    name: Pin release branch and move tags
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.release-please.outputs.sha }}
+
+      - name: Pin action.yml on the release branch and move tags
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+          VERSION="${TAG#v}"
+          MAJOR="v${VERSION%%.*}"
+          MINOR="v${VERSION%.*}"
+          FULL="v${VERSION}"
+          RELEASE_BRANCH="release/${MAJOR}"
+
+          git checkout -B "$RELEASE_BRANCH"
+
+          sed -i "s|docker://ghcr.io/vln-devsecops/actions-validate-coverage:[^'\"]*|docker://ghcr.io/vln-devsecops/actions-validate-coverage:${VERSION}|g" action.yml
+          git add action.yml
+          git diff --cached --quiet || git commit -m "chore: pin action.yml to ${FULL}"
+
+          git push origin "$RELEASE_BRANCH" --force
+
+          git tag -fa "$FULL" -m "Release $FULL"
+          git tag -fa "$MAJOR" -m "Release $FULL"
+          git tag -fa "$MINOR" -m "Release $FULL"
+          git push origin "refs/tags/$FULL" "refs/tags/$MAJOR" "refs/tags/$MINOR" --force

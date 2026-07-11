@@ -22,12 +22,20 @@ inputs:
     description: 'Working directory where the coverage file is located'
     required: false
     default: '.'
+  json-report-file:
+    description: 'Path to write a machine-readable JSON coverage report, for dashboard consumption (relative to working-directory)'
+    required: false
+    default: ''
 
 outputs:
   coverage-percentage:
     description: 'The actual coverage percentage found'
   status:
     description: 'Pass or fail status of the validation'
+  report-json:
+    description: 'A compact JSON string summarizing the coverage report, for machine consumption'
+  report-file:
+    description: 'Path to the JSON report file (only set when json-report-file is provided)'
 
 runs:
   using: 'docker'
@@ -40,3 +48,4 @@ runs:
     - ${{ inputs.minimum-coverage }}
     - ${{ inputs.coverage-type }}
     - ${{ inputs.working-directory }}
+    - ${{ inputs.json-report-file }}

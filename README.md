@@ -9,6 +9,7 @@ A fast, Docker-based GitHub Action for validating test coverage from XML files a
 - ✅ **Configurable thresholds** - Set minimum coverage percentages
 - ✅ **Clear output** - Colored logs and detailed error messages
 - ✅ **GitHub Actions integration** - Outputs for use in other steps
+- ✅ **Machine-readable JSON report** - A structured summary for dashboards and other tooling
 
 ## Supported Coverage Formats
 
@@ -83,6 +84,7 @@ This action follows semantic versioning with convenience tags:
 | `minimum-coverage` | Minimum coverage percentage required | ❌ | 85 |
 | `coverage-type` | XML format type (`clover`, `cobertura`, `jacoco`) | ❌ | `cobertura` |
 | `working-directory` | Working directory for the coverage file | ❌ | `.` |
+| `json-report-file` | Path to write a machine-readable JSON report (relative to `working-directory`) | ❌ | - |
 
 ## Outputs
 
@@ -90,6 +92,48 @@ This action follows semantic versioning with convenience tags:
 |--------|-------------|
 | `coverage-percentage` | The actual coverage percentage found |
 | `status` | `pass` or `fail` status of validation |
+| `report-json` | A compact JSON string summarizing the coverage report |
+| `report-file` | Path to the JSON report file (only set when `json-report-file` is provided) |
+
+## Machine-Readable Report
+
+For dashboards or other tooling that consume coverage results, the action can emit a
+structured JSON report, either as the `report-json` output or as a file:
+
+```yaml
+- name: Validate Coverage
+  id: coverage
+  uses: vln-devsecops/actions-validate-coverage@v1
+  with:
+    coverage-file: 'coverage/clover.xml'
+    minimum-coverage: '80'
+    json-report-file: 'coverage-report.json'
+
+- name: Upload coverage report
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: coverage-report
+    path: coverage-report.json
+```
+
+The report has the following shape:
+
+```json
+{
+  "coverageFile": "coverage/clover.xml",
+  "coverageType": "clover",
+  "coveragePercentage": 85,
+  "minimumCoverage": 80,
+  "status": "pass",
+  "covered": 85,
+  "total": 100,
+  "timestamp": "2026-07-11T16:10:40Z"
+}
+```
+
+`covered` and `total` are `null` when the coverage format doesn't expose those counts
+(for example, a Cobertura file without `lines-covered`/`lines-valid` attributes).
 
 ## Examples
 

@@ -243,9 +243,13 @@ REPORT_JSON=$(jq -nc \
         timestamp: $timestamp
     }')
 
-# Write the JSON report to file, if requested
+# Write the JSON report to file, if requested. Resolve to an absolute path
+# since downstream steps (e.g. actions/upload-artifact) resolve relative
+# paths against the workspace root, not this script's working directory.
 if [ -n "$JSON_REPORT_FILE" ]; then
+    mkdir -p "$(dirname "$JSON_REPORT_FILE")"
     echo "$REPORT_JSON" | jq '.' > "$JSON_REPORT_FILE"
+    JSON_REPORT_FILE="$(cd "$(dirname "$JSON_REPORT_FILE")" && pwd)/$(basename "$JSON_REPORT_FILE")"
     log "Wrote JSON report to: $JSON_REPORT_FILE"
 fi
 

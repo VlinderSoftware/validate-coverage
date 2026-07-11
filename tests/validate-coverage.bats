@@ -59,6 +59,20 @@ assert_output_contains() {
     grep -Fx "report-file=${report_file}" "$OUTPUT_FILE"
 }
 
+@test "resolves a relative json-report-file against the workspace root, creating missing directories" {
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+    mkdir -p "$BATS_TEST_TMPDIR/project/coverage"
+    cp "$REPO_ROOT/examples/clover.xml" "$BATS_TEST_TMPDIR/project/coverage/clover.xml"
+
+    run "$SCRIPT" "coverage/clover.xml" 80 clover "$BATS_TEST_TMPDIR/project" "reports/coverage-report.json"
+
+    [ "$status" -eq 0 ]
+    expected_file="$BATS_TEST_TMPDIR/project/reports/coverage-report.json"
+    [ -f "$expected_file" ]
+    [ "$(jq -r '.status' "$expected_file")" = "pass" ]
+    grep -Fx "report-file=${expected_file}" "$OUTPUT_FILE"
+}
+
 @test "reports null covered/total for cobertura files without line counts" {
     export GITHUB_OUTPUT="$OUTPUT_FILE"
 

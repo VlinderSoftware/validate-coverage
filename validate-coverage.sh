@@ -243,20 +243,22 @@ REPORT_JSON=$(jq -nc \
         timestamp: $timestamp
     }')
 
-# Set outputs for GitHub Actions (if running in GitHub Actions)
-if [ -n "$GITHUB_OUTPUT" ]; then
-    echo "coverage-percentage=${COVERAGE}" >> "$GITHUB_OUTPUT"
-    echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
-    echo "report-json=${REPORT_JSON}" >> "$GITHUB_OUTPUT"
-fi
-
 # Write the JSON report to file, if requested
 if [ -n "$JSON_REPORT_FILE" ]; then
     echo "$REPORT_JSON" | jq '.' > "$JSON_REPORT_FILE"
     log "Wrote JSON report to: $JSON_REPORT_FILE"
-    if [ -n "$GITHUB_OUTPUT" ]; then
-        echo "report-file=${JSON_REPORT_FILE}" >> "$GITHUB_OUTPUT"
-    fi
+fi
+
+# Set outputs for GitHub Actions (if running in GitHub Actions)
+if [ -n "$GITHUB_OUTPUT" ]; then
+    {
+        echo "coverage-percentage=${COVERAGE}"
+        echo "status=${STATUS}"
+        echo "report-json=${REPORT_JSON}"
+        if [ -n "$JSON_REPORT_FILE" ]; then
+            echo "report-file=${JSON_REPORT_FILE}"
+        fi
+    } >> "$GITHUB_OUTPUT"
 fi
 
 # Compare with minimum

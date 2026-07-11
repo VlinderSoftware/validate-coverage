@@ -6,11 +6,35 @@ setup() {
     OUTPUT_FILE="$BATS_TEST_TMPDIR/github-output.txt"
     : > "$OUTPUT_FILE"
     unset GITHUB_OUTPUT
+    unset STATUS_TOKEN
+    unset STATUS_CONTEXT
+    export GITHUB_SERVER_URL="https://github.com"
+    export GITHUB_REPOSITORY="acme/widgets"
+    export GITHUB_SHA="deadbeef"
+    export GITHUB_RUN_ID="123"
+    export GITHUB_API_URL="https://api.github.com"
 }
 
 assert_output_contains() {
     local expected="$1"
     [[ "$output" == *"$expected"* ]]
+}
+
+# Installs a fake `curl` ahead of the real one on PATH that records the
+# arguments it was called with to $CURL_LOG and exits with $exit_code.
+setup_fake_curl() {
+    local exit_code="${1:-0}"
+    CURL_LOG="$BATS_TEST_TMPDIR/curl-calls.log"
+    : > "$CURL_LOG"
+    local bin_dir="$BATS_TEST_TMPDIR/bin"
+    mkdir -p "$bin_dir"
+    cat > "$bin_dir/curl" <<EOF
+#!/bin/bash
+echo "\$@" >> "$CURL_LOG"
+exit ${exit_code}
+EOF
+    chmod +x "$bin_dir/curl"
+    PATH="$bin_dir:$PATH"
 }
 
 @test "passes clover coverage and writes action outputs" {
@@ -90,4 +114,52 @@ assert_output_contains() {
 
     [ "$status" -eq 1 ]
     assert_output_contains "No line rate found in coverage file or invalid Cobertura format"
+}
+
+@test "does not call curl when STATUS_TOKEN is unset" {
+    setup_fake_curl 0
+    unset STATUS_TOKEN
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    [ ! -s "$CURL_LOG" ]
+}
+
+@test "publishes a success commit status when coverage passes and STATUS_TOKEN is set" {
+    setup_fake_curl 0
+    export STATUS_TOKEN="test-token"
+    export STATUS_CONTEXT="coverage/validate-coverage"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    [ -s "$CURL_LOG" ]
+    grep -q "api.github.com/repos/acme/widgets/statuses/deadbeef" "$CURL_LOG"
+    grep -q '"state":"success"' "$CURL_LOG"
+    grep -q '"context":"coverage/validate-coverage"' "$CURL_LOG"
+    grep -q '"description":"Coverage: 85% (min 80%)"' "$CURL_LOG"
+}
+
+@test "publishes a failure commit status when coverage fails and STATUS_TOKEN is set" {
+    setup_fake_curl 0
+    export STATUS_TOKEN="test-token"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 90 clover
+
+    [ "$status" -eq 1 ]
+    [ -s "$CURL_LOG" ]
+    grep -q '"state":"failure"' "$CURL_LOG"
+    grep -q '"description":"Coverage: 85% (min 90%)"' "$CURL_LOG"
+}
+
+@test "does not fail the script when the commit status POST fails" {
+    setup_fake_curl 1
+    export STATUS_TOKEN="test-token"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    assert_output_contains "::warning::failed to publish coverage commit status"
+    assert_output_contains "Coverage validation passed!"
 }

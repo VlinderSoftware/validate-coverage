@@ -75,6 +75,32 @@ This action follows semantic versioning with convenience tags:
       })
 ```
 
+### Reporting to dashboards
+
+Set `github-token` to have the action publish a [commit status](https://docs.github.com/en/rest/commits/statuses)
+with the coverage result. This is opt-in and off by default — without it, the action behaves exactly as before.
+
+```yaml
+- name: Validate Coverage
+  id: coverage
+  uses: vln-devsecops/actions-validate-coverage@v1
+  with:
+    coverage-file: 'coverage/cobertura.xml'
+    minimum-coverage: '80'
+    github-token: ${{ github.token }}
+```
+
+The status is posted using the workflow's own `GITHUB_TOKEN` (the default `statuses: write`
+permission is enough — no PAT or cross-repo secret needed), with a `context` starting with
+`coverage` and a `description` of the form `Coverage: <percentage>% (min <minimum>%)`.
+
+This is what feeds the `vln-devsecops/operations` org dashboard's coverage column. The dashboard
+reads the combined commit status of each monitored repo's **default branch**, so the status only
+shows up there if it's posted from a run against the default branch's latest commit (e.g. a `push`
+trigger on `main`) — a status posted from a pull-request run against a feature-branch commit won't
+be picked up. If you want the dashboard to reflect your coverage, make sure `github-token` is set
+on the workflow run that triggers on your default branch.
+
 ## Inputs
 
 | Input | Description | Required | Default |
@@ -83,6 +109,8 @@ This action follows semantic versioning with convenience tags:
 | `minimum-coverage` | Minimum coverage percentage required | ❌ | 85 |
 | `coverage-type` | XML format type (`clover`, `cobertura`, `jacoco`) | ❌ | `cobertura` |
 | `working-directory` | Working directory for the coverage file | ❌ | `.` |
+| `github-token` | Token used to publish a commit status with the coverage result (e.g. `${{ github.token }}`). Omit to skip status publishing entirely — the action behaves exactly as before | ❌ | - |
+| `status-context` | Commit status context to publish under. Must start with `coverage` to be picked up by the org dashboard | ❌ | `coverage/validate-coverage` |
 
 ## Outputs
 

@@ -208,11 +208,53 @@ if [ -n "$GITHUB_OUTPUT" ]; then
     echo "coverage-percentage=${COVERAGE}" >> "$GITHUB_OUTPUT"
 fi
 
+# Publish a commit status with the coverage result, if a token was provided.
+# This is entirely opt-in: with no STATUS_TOKEN, this is a no-op so existing
+# callers see zero behavior change.
+publish_commit_status() {
+    local state="$1"
+    local description="$2"
+
+    if [ -z "${STATUS_TOKEN:-}" ]; then
+        return 0
+    fi
+
+    if [ "${#description}" -gt 140 ]; then
+        description="${description:0:140}"
+    fi
+
+    local context="${STATUS_CONTEXT:-coverage/validate-coverage}"
+    local target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+    local api_url="${GITHUB_API_URL:-https://api.github.com}/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
+    local body
+    body=$(jq -n -c \
+        --arg state "$state" \
+        --arg context "$context" \
+        --arg description "$description" \
+        --arg target_url "$target_url" \
+        '{state: $state, context: $context, description: $description, target_url: $target_url}')
+
+    # A failed status POST must never fail an otherwise-successful validation run.
+    if ! curl --silent --show-error --fail \
+        --request POST \
+        --header "Authorization: Bearer ${STATUS_TOKEN}" \
+        --header "Accept: application/vnd.github+json" \
+        --header "X-GitHub-Api-Version: 2022-11-28" \
+        --header "Content-Type: application/json" \
+        --data "$body" \
+        --output /dev/null \
+        "$api_url"; then
+        echo "::warning::failed to publish coverage commit status"
+    fi
+}
+
 # Compare with minimum
 if [ "$COVERAGE" -lt "$MINIMUM_COVERAGE" ]; then
     if [ -n "$GITHUB_OUTPUT" ]; then
         echo "status=fail" >> "$GITHUB_OUTPUT"
     fi
+    publish_commit_status "failure" "Coverage: ${COVERAGE}% (min ${MINIMUM_COVERAGE}%)"
     error "Coverage validation failed!"
     error "Actual coverage (${COVERAGE}%) is below minimum required (${MINIMUM_COVERAGE}%)"
     exit 1
@@ -220,6 +262,7 @@ else
     if [ -n "$GITHUB_OUTPUT" ]; then
         echo "status=pass" >> "$GITHUB_OUTPUT"
     fi
+    publish_commit_status "success" "Coverage: ${COVERAGE}% (min ${MINIMUM_COVERAGE}%)"
     success "Coverage validation passed!"
     success "Actual coverage (${COVERAGE}%) meets minimum requirement (${MINIMUM_COVERAGE}%)"
 fi

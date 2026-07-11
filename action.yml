@@ -22,6 +22,13 @@ inputs:
     description: 'Working directory where the coverage file is located'
     required: false
     default: '.'
+  github-token:
+    description: 'Token used to publish a commit status with the coverage result (e.g. ${{ github.token }}). Omit to skip status publishing entirely — the action behaves exactly as before.'
+    required: false
+  status-context:
+    description: 'Commit status context to publish under. Must start with "coverage" to be picked up by the org dashboard.'
+    required: false
+    default: 'coverage/validate-coverage'
 
 outputs:
   coverage-percentage:
@@ -40,3 +47,6 @@ runs:
     - ${{ inputs.minimum-coverage }}
     - ${{ inputs.coverage-type }}
     - ${{ inputs.working-directory }}
+  env:
+    STATUS_TOKEN: ${{ inputs.github-token }}
+    STATUS_CONTEXT: ${{ inputs.status-context }}

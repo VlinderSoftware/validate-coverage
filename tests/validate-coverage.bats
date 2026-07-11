@@ -37,6 +37,19 @@ EOF
     PATH="$bin_dir:$PATH"
 }
 
+# Installs a fake `jq` ahead of the real one on PATH that always fails, to
+# verify a broken payload build doesn't abort the script under `set -e`.
+setup_failing_jq() {
+    local bin_dir="$BATS_TEST_TMPDIR/bin"
+    mkdir -p "$bin_dir"
+    cat > "$bin_dir/jq" <<'EOF'
+#!/bin/bash
+exit 1
+EOF
+    chmod +x "$bin_dir/jq"
+    PATH="$bin_dir:$PATH"
+}
+
 @test "passes clover coverage and writes action outputs" {
     export GITHUB_OUTPUT="$OUTPUT_FILE"
 
@@ -161,5 +174,16 @@ EOF
 
     [ "$status" -eq 0 ]
     assert_output_contains "::warning::failed to publish coverage commit status"
+    assert_output_contains "Coverage validation passed!"
+}
+
+@test "does not fail the script when building the status payload fails" {
+    setup_failing_jq
+    export STATUS_TOKEN="test-token"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    assert_output_contains "::warning::failed to build coverage commit status payload"
     assert_output_contains "Coverage validation passed!"
 }

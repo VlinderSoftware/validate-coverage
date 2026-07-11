@@ -227,13 +227,18 @@ publish_commit_status() {
     local target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
     local api_url="${GITHUB_API_URL:-https://api.github.com}/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
 
+    # Building the payload must never fail the run either, so guard the jq
+    # call itself rather than letting `set -e` abort on a non-zero exit.
     local body
-    body=$(jq -n -c \
+    if ! body=$(jq -n -c \
         --arg state "$state" \
         --arg context "$context" \
         --arg description "$description" \
         --arg target_url "$target_url" \
-        '{state: $state, context: $context, description: $description, target_url: $target_url}')
+        '{state: $state, context: $context, description: $description, target_url: $target_url}'); then
+        echo "::warning::failed to build coverage commit status payload"
+        return 0
+    fi
 
     # A failed status POST must never fail an otherwise-successful validation run.
     if ! curl --silent --show-error --fail \

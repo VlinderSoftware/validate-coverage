@@ -187,3 +187,95 @@ EOF
     assert_output_contains "::warning::failed to build coverage commit status payload"
     assert_output_contains "Coverage validation passed!"
 }
+
+@test "always emits a report-json output alongside the existing outputs" {
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    report_json="$(grep "^report-json=" "$OUTPUT_FILE" | cut -d= -f2-)"
+    [ "$(echo "$report_json" | jq -r '.coverageFile')" = "$REPO_ROOT/examples/clover.xml" ]
+    [ "$(echo "$report_json" | jq -r '.coverageType')" = "clover" ]
+    [ "$(echo "$report_json" | jq -r '.coveragePercentage')" = "85" ]
+    [ "$(echo "$report_json" | jq -r '.minimumCoverage')" = "80" ]
+    [ "$(echo "$report_json" | jq -r '.status')" = "pass" ]
+    [ "$(echo "$report_json" | jq -r '.covered')" = "85" ]
+    [ "$(echo "$report_json" | jq -r '.total')" = "100" ]
+}
+
+@test "reports fail status in report-json when coverage is below the minimum" {
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 90 clover
+
+    [ "$status" -eq 1 ]
+    report_json="$(grep "^report-json=" "$OUTPUT_FILE" | cut -d= -f2-)"
+    [ "$(echo "$report_json" | jq -r '.status')" = "fail" ]
+}
+
+@test "reports null covered/total for cobertura files without line counts" {
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/cobertura.xml" 80 cobertura
+
+    [ "$status" -eq 0 ]
+    report_json="$(grep "^report-json=" "$OUTPUT_FILE" | cut -d= -f2-)"
+    [ "$(echo "$report_json" | jq -r '.covered')" = "null" ]
+    [ "$(echo "$report_json" | jq -r '.total')" = "null" ]
+}
+
+@test "writes a JSON report file when json-report-file is provided" {
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+    report_file="$BATS_TEST_TMPDIR/coverage-report.json"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover . "$report_file"
+
+    [ "$status" -eq 0 ]
+    [ -f "$report_file" ]
+    [ "$(jq -r '.coveragePercentage' "$report_file")" = "85" ]
+    [ "$(jq -r '.status' "$report_file")" = "pass" ]
+    grep -Fx "report-file=${report_file}" "$OUTPUT_FILE"
+}
+
+@test "resolves a relative json-report-file against the workspace root, creating missing directories" {
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+    mkdir -p "$BATS_TEST_TMPDIR/project/coverage"
+    cp "$REPO_ROOT/examples/clover.xml" "$BATS_TEST_TMPDIR/project/coverage/clover.xml"
+
+    run "$SCRIPT" "coverage/clover.xml" 80 clover "$BATS_TEST_TMPDIR/project" "reports/coverage-report.json"
+
+    [ "$status" -eq 0 ]
+    expected_file="$BATS_TEST_TMPDIR/project/reports/coverage-report.json"
+    [ -f "$expected_file" ]
+    [ "$(jq -r '.status' "$expected_file")" = "pass" ]
+    grep -Fx "report-file=${expected_file}" "$OUTPUT_FILE"
+}
+
+@test "does not fail the script when building the JSON report fails" {
+    setup_failing_jq
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+    unset STATUS_TOKEN
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    assert_output_contains "::warning::failed to build coverage JSON report"
+    assert_output_contains "Coverage validation passed!"
+    ! grep -q "^report-json=" "$OUTPUT_FILE"
+}
+
+@test "publishes both a commit status and a report file when both are configured" {
+    setup_fake_curl 0
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+    export STATUS_TOKEN="test-token"
+    report_file="$BATS_TEST_TMPDIR/coverage-report.json"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover . "$report_file"
+
+    [ "$status" -eq 0 ]
+    [ -f "$report_file" ]
+    [ -s "$CURL_LOG" ]
+    grep -q '"state":"success"' "$CURL_LOG"
+    grep -Fx "report-file=${report_file}" "$OUTPUT_FILE"
+}

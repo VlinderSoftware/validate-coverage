@@ -29,12 +29,20 @@ inputs:
     description: 'Commit status context to publish under. Must start with "coverage" to be picked up by the org dashboard.'
     required: false
     default: 'coverage/validate-coverage'
+  json-report-file:
+    description: 'Path to write a machine-readable JSON coverage report (relative to working-directory), for dashboards in other orgs that consume a workflow artifact instead of a commit status. Omit to skip report-file generation — the report-json output is still produced.'
+    required: false
+    default: ''
 
 outputs:
   coverage-percentage:
     description: 'The actual coverage percentage found'
   status:
     description: 'Pass or fail status of the validation'
+  report-json:
+    description: 'A compact JSON string summarizing the coverage report (coverageFile, coverageType, coveragePercentage, minimumCoverage, status, covered, total, timestamp)'
+  report-file:
+    description: 'Absolute path to the written JSON report file (only set when json-report-file is provided and the write succeeds)'
 
 runs:
   using: 'docker'
@@ -47,6 +55,7 @@ runs:
     - ${{ inputs.minimum-coverage }}
     - ${{ inputs.coverage-type }}
     - ${{ inputs.working-directory }}
+    - ${{ inputs.json-report-file }}
   env:
     STATUS_TOKEN: ${{ inputs.github-token }}
     STATUS_CONTEXT: ${{ inputs.status-context }}

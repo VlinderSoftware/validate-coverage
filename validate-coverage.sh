@@ -6,6 +6,7 @@ COVERAGE_FILE="$1"
 MINIMUM_COVERAGE="$2"
 COVERAGE_TYPE="${3:-clover}"
 WORKING_DIRECTORY="${4:-.}"
+JSON_REPORT_FILE="${5:-}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -33,18 +34,20 @@ error() {
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 <coverage-file> <minimum-percentage> [coverage-type] [working-directory]"
+    echo "Usage: $0 <coverage-file> <minimum-percentage> [coverage-type] [working-directory] [json-report-file]"
     echo ""
     echo "Parameters:"
     echo "  coverage-file       Path to the coverage file"
     echo "  minimum-percentage  Minimum coverage percentage (0-100)"
     echo "  coverage-type       Type of coverage file (clover, cobertura, jacoco) - defaults to 'clover'"
     echo "  working-directory   Working directory - defaults to current directory"
+    echo "  json-report-file    Path to write a machine-readable JSON report - optional"
     echo ""
     echo "Examples:"
     echo "  $0 coverage/clover.xml 80"
     echo "  $0 coverage/cobertura.xml 75 cobertura"
     echo "  $0 coverage/jacoco.xml 90 jacoco /path/to/project"
+    echo "  $0 coverage/clover.xml 80 clover . coverage-report.json"
 }
 
 detect_coverage_type() {
@@ -159,6 +162,10 @@ case "$COVERAGE_TYPE" in
         
         # Convert decimal to percentage
         COVERAGE=$(echo "$LINE_RATE * 100" | bc | cut -d. -f1)
+
+        # Extract covered/total line counts if present, for the JSON report
+        COVERED=$(xmllint --xpath "string(/coverage/@lines-covered)" "$COVERAGE_FILE" 2>/dev/null || echo "")
+        TOTAL=$(xmllint --xpath "string(/coverage/@lines-valid)" "$COVERAGE_FILE" 2>/dev/null || echo "")
         ;;
         
     "jacoco")
@@ -203,9 +210,70 @@ fi
 
 log "Actual coverage: ${COVERAGE}%"
 
+# Determine pass/fail status up front so the report and outputs below agree
+# with the exit code decided later.
+if [ "$COVERAGE" -lt "$MINIMUM_COVERAGE" ]; then
+    STATUS="fail"
+else
+    STATUS="pass"
+fi
+
+# Build a machine-readable JSON report, for orgs whose dashboards consume a
+# workflow artifact rather than a commit status. Report generation is
+# best-effort: a broken jq must never fail an otherwise-successful run.
+REPORT_JSON=""
+if command -v jq &> /dev/null; then
+    if ! REPORT_JSON=$(jq -n -c \
+        --arg coverageFile "$COVERAGE_FILE" \
+        --arg coverageType "$COVERAGE_TYPE" \
+        --argjson coveragePercentage "$COVERAGE" \
+        --argjson minimumCoverage "$MINIMUM_COVERAGE" \
+        --arg status "$STATUS" \
+        --arg covered "${COVERED:-}" \
+        --arg total "${TOTAL:-}" \
+        --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        '{
+            coverageFile: $coverageFile,
+            coverageType: $coverageType,
+            coveragePercentage: $coveragePercentage,
+            minimumCoverage: $minimumCoverage,
+            status: $status,
+            covered: (if $covered == "" then null else ($covered | tonumber) end),
+            total: (if $total == "" then null else ($total | tonumber) end),
+            timestamp: $timestamp
+        }'); then
+        echo "::warning::failed to build coverage JSON report"
+        REPORT_JSON=""
+    fi
+else
+    echo "::warning::jq is not installed; skipping JSON report generation"
+fi
+
+# Write the JSON report to file, if requested. Resolve to an absolute path
+# since downstream steps (e.g. actions/upload-artifact) resolve relative
+# paths against the workspace root, not this script's working directory.
+REPORT_FILE_ABS=""
+if [ -n "$JSON_REPORT_FILE" ] && [ -n "$REPORT_JSON" ]; then
+    if mkdir -p "$(dirname "$JSON_REPORT_FILE")" && echo "$REPORT_JSON" | jq '.' > "$JSON_REPORT_FILE"; then
+        REPORT_FILE_ABS="$(cd "$(dirname "$JSON_REPORT_FILE")" && pwd)/$(basename "$JSON_REPORT_FILE")"
+        log "Wrote JSON report to: $REPORT_FILE_ABS"
+    else
+        echo "::warning::failed to write JSON report to: $JSON_REPORT_FILE"
+    fi
+fi
+
 # Set outputs for GitHub Actions (if running in GitHub Actions)
 if [ -n "$GITHUB_OUTPUT" ]; then
-    echo "coverage-percentage=${COVERAGE}" >> "$GITHUB_OUTPUT"
+    {
+        echo "coverage-percentage=${COVERAGE}"
+        echo "status=${STATUS}"
+        if [ -n "$REPORT_JSON" ]; then
+            echo "report-json=${REPORT_JSON}"
+        fi
+        if [ -n "$REPORT_FILE_ABS" ]; then
+            echo "report-file=${REPORT_FILE_ABS}"
+        fi
+    } >> "$GITHUB_OUTPUT"
 fi
 
 # Publish a commit status with the coverage result, if a token was provided.
@@ -254,19 +322,13 @@ publish_commit_status() {
     fi
 }
 
-# Compare with minimum
-if [ "$COVERAGE" -lt "$MINIMUM_COVERAGE" ]; then
-    if [ -n "$GITHUB_OUTPUT" ]; then
-        echo "status=fail" >> "$GITHUB_OUTPUT"
-    fi
+# Report the final result and exit accordingly
+if [ "$STATUS" = "fail" ]; then
     publish_commit_status "failure" "Coverage: ${COVERAGE}% (min ${MINIMUM_COVERAGE}%)"
     error "Coverage validation failed!"
     error "Actual coverage (${COVERAGE}%) is below minimum required (${MINIMUM_COVERAGE}%)"
     exit 1
 else
-    if [ -n "$GITHUB_OUTPUT" ]; then
-        echo "status=pass" >> "$GITHUB_OUTPUT"
-    fi
     publish_commit_status "success" "Coverage: ${COVERAGE}% (min ${MINIMUM_COVERAGE}%)"
     success "Coverage validation passed!"
     success "Actual coverage (${COVERAGE}%) meets minimum requirement (${MINIMUM_COVERAGE}%)"

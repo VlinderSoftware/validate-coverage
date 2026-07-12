@@ -81,10 +81,10 @@ This action follows semantic versioning with convenience tags:
 There are two independent, opt-in ways to feed a coverage result to a dashboard. Use either or
 both — neither changes the action's default behavior, and enabling one does not require the other.
 
-#### Commit status (for the `vln-devsecops` org dashboard)
+#### Commit status (GitHub-native, any consumer)
 
 Set `github-token` to have the action publish a [commit status](https://docs.github.com/en/rest/commits/statuses)
-with the coverage result.
+with the coverage result, readable by any dashboard or tool that consumes GitHub's commit-status API.
 
 ```yaml
 - name: Validate Coverage
@@ -100,16 +100,16 @@ The status is posted using the workflow's own `GITHUB_TOKEN` (the default `statu
 permission is enough — no PAT or cross-repo secret needed), with a `context` starting with
 `coverage` and a `description` of the form `Coverage: <percentage>% (min <minimum>%)`.
 
-This is what feeds the `vln-devsecops/operations` org dashboard's coverage column specifically.
-That dashboard reads the combined commit status of each monitored repo's **default branch**, so the
-status only shows up there if it's posted from a run against the default branch's latest commit
-(e.g. a `push` trigger on `main`) — a status posted from a pull-request run against a feature-branch
-commit won't be picked up. If you want that dashboard to reflect your coverage, make sure
-`github-token` is set on the workflow run that triggers on your default branch.
+One example consumer is the `vln-devsecops/operations` org dashboard, which reads the combined
+commit status of each monitored repo's **default branch** and looks for a `context` starting with
+`coverage`. Most commit-status consumers work the same way — the status only shows up if it's
+posted from a run against the default branch's latest commit (e.g. a `push` trigger on `main`), not
+from a pull-request run against a feature-branch commit. If your dashboard reads a repo's default
+branch status, make sure `github-token` is set on the workflow run that triggers there.
 
-This mechanism isn't specific to any one repo or org beyond needing that dashboard's consumer code
-to be pointed at it — each caller posts to its own repo with its own token. If your org's tooling
-can't read commit statuses, use the JSON report below instead.
+Each caller posts its own commit status to its own repo with its own token, so this works the same
+way for any repo or org — it isn't specific to `vln-devsecops`. If your dashboard doesn't (or can't)
+read commit statuses, use the JSON report below instead.
 
 #### JSON report (portable — any org, any dashboard)
 
@@ -132,7 +132,7 @@ additionally have it written to disk, so it can be uploaded as a workflow artifa
   uses: actions/upload-artifact@v4
   with:
     name: coverage-report
-    path: coverage-report.json
+    path: ${{ steps.coverage.outputs.report-file }}
 ```
 
 The report has the following shape:
@@ -165,8 +165,8 @@ validation run.
 | `coverage-type` | XML format type (`clover`, `cobertura`, `jacoco`) | ❌ | `cobertura` |
 | `working-directory` | Working directory for the coverage file | ❌ | `.` |
 | `github-token` | Token used to publish a commit status with the coverage result (e.g. `${{ github.token }}`). Omit to skip status publishing entirely — the action behaves exactly as before | ❌ | - |
-| `status-context` | Commit status context to publish under. Must start with `coverage` to be picked up by the org dashboard | ❌ | `coverage/validate-coverage` |
-| `json-report-file` | Path to write a machine-readable JSON coverage report (relative to `working-directory`), for dashboards in other orgs that consume a workflow artifact instead of a commit status. Omit to skip file generation — the `report-json` output is still produced | ❌ | - |
+| `status-context` | Commit status context to publish under. Use a prefix a consumer filters on — `coverage` (the default) is what the `vln-devsecops/operations` dashboard looks for | ❌ | `coverage/validate-coverage` |
+| `json-report-file` | Path to write a machine-readable JSON coverage report (relative to `working-directory`), for dashboards that consume a workflow artifact instead of a commit status. Omit to skip file generation — the `report-json` output is still produced | ❌ | - |
 
 ## Outputs
 
@@ -175,7 +175,7 @@ validation run.
 | `coverage-percentage` | The actual coverage percentage found |
 | `status` | `pass` or `fail` status of validation |
 | `report-json` | A compact JSON string summarizing the coverage report (see shape above) |
-| `report-file` | Absolute path to the written JSON report file (only set when `json-report-file` is provided and the write succeeds) |
+| `report-file` | Path to the written JSON report file, relative to `$GITHUB_WORKSPACE` when possible so it's directly usable by later steps like `actions/upload-artifact` (falls back to an absolute container path otherwise). Only set when `json-report-file` is provided and the write succeeds |
 
 ## Examples
 

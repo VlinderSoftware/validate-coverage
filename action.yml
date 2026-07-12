@@ -42,7 +42,7 @@ outputs:
   report-json:
     description: 'A compact JSON string summarizing the coverage report (coverageFile, coverageType, coveragePercentage, minimumCoverage, status, covered, total, timestamp)'
   report-file:
-    description: 'Absolute path to the written JSON report file (only set when json-report-file is provided and the write succeeds)'
+    description: 'Path to the written JSON report file, relative to $GITHUB_WORKSPACE when the report lives under it (falls back to an absolute container path otherwise) so it can be used directly by later steps like actions/upload-artifact. Only set when json-report-file is provided and the write succeeds'
 
 runs:
   using: 'docker'

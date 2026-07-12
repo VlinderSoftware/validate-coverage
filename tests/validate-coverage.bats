@@ -8,6 +8,7 @@ setup() {
     unset GITHUB_OUTPUT
     unset STATUS_TOKEN
     unset STATUS_CONTEXT
+    unset GITHUB_WORKSPACE
     export GITHUB_SERVER_URL="https://github.com"
     export GITHUB_REPOSITORY="acme/widgets"
     export GITHUB_SHA="deadbeef"
@@ -250,6 +251,42 @@ EOF
     [ -f "$expected_file" ]
     [ "$(jq -r '.status' "$expected_file")" = "pass" ]
     grep -Fx "report-file=${expected_file}" "$OUTPUT_FILE"
+}
+
+@test "emits a workspace-relative report-file when GITHUB_WORKSPACE is set" {
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+    export GITHUB_WORKSPACE="$BATS_TEST_TMPDIR"
+    report_file="$BATS_TEST_TMPDIR/coverage-report.json"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover . "$report_file"
+
+    [ "$status" -eq 0 ]
+    [ -f "$report_file" ]
+    grep -Fx "report-file=coverage-report.json" "$OUTPUT_FILE"
+}
+
+@test "emits a workspace-relative report-file for nested paths under GITHUB_WORKSPACE" {
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+    mkdir -p "$BATS_TEST_TMPDIR/project/coverage"
+    cp "$REPO_ROOT/examples/clover.xml" "$BATS_TEST_TMPDIR/project/coverage/clover.xml"
+    export GITHUB_WORKSPACE="$BATS_TEST_TMPDIR/project"
+
+    run "$SCRIPT" "coverage/clover.xml" 80 clover "$BATS_TEST_TMPDIR/project" "reports/coverage-report.json"
+
+    [ "$status" -eq 0 ]
+    [ -f "$BATS_TEST_TMPDIR/project/reports/coverage-report.json" ]
+    grep -Fx "report-file=reports/coverage-report.json" "$OUTPUT_FILE"
+}
+
+@test "falls back to an absolute report-file path when it's outside GITHUB_WORKSPACE" {
+    export GITHUB_OUTPUT="$OUTPUT_FILE"
+    export GITHUB_WORKSPACE="$BATS_TEST_TMPDIR/unrelated-workspace"
+    report_file="$BATS_TEST_TMPDIR/coverage-report.json"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover . "$report_file"
+
+    [ "$status" -eq 0 ]
+    grep -Fx "report-file=${report_file}" "$OUTPUT_FILE"
 }
 
 @test "does not fail the script when building the JSON report fails" {

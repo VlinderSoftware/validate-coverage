@@ -249,14 +249,22 @@ else
     echo "::warning::jq is not installed; skipping JSON report generation"
 fi
 
-# Write the JSON report to file, if requested. Resolve to an absolute path
-# since downstream steps (e.g. actions/upload-artifact) resolve relative
-# paths against the workspace root, not this script's working directory.
-REPORT_FILE_ABS=""
+# Write the JSON report to file, if requested. This runs inside the action's
+# Docker container, so an absolute path here (e.g. /github/workspace/...) is a
+# container-local path that later, non-container workflow steps (like
+# actions/upload-artifact) can't use. Emit a path relative to $GITHUB_WORKSPACE
+# instead, when the report lives under it, so it's directly usable by
+# subsequent steps; fall back to the absolute path otherwise.
+REPORT_FILE_OUTPUT=""
 if [ -n "$JSON_REPORT_FILE" ] && [ -n "$REPORT_JSON" ]; then
     if mkdir -p "$(dirname "$JSON_REPORT_FILE")" && echo "$REPORT_JSON" | jq '.' > "$JSON_REPORT_FILE"; then
-        REPORT_FILE_ABS="$(cd "$(dirname "$JSON_REPORT_FILE")" && pwd)/$(basename "$JSON_REPORT_FILE")"
-        log "Wrote JSON report to: $REPORT_FILE_ABS"
+        report_file_abs="$(cd "$(dirname "$JSON_REPORT_FILE")" && pwd)/$(basename "$JSON_REPORT_FILE")"
+        if [ -n "${GITHUB_WORKSPACE:-}" ] && [[ "$report_file_abs" == "$GITHUB_WORKSPACE"/* ]]; then
+            REPORT_FILE_OUTPUT="${report_file_abs#"$GITHUB_WORKSPACE"/}"
+        else
+            REPORT_FILE_OUTPUT="$report_file_abs"
+        fi
+        log "Wrote JSON report to: $report_file_abs"
     else
         echo "::warning::failed to write JSON report to: $JSON_REPORT_FILE"
     fi
@@ -270,8 +278,8 @@ if [ -n "$GITHUB_OUTPUT" ]; then
         if [ -n "$REPORT_JSON" ]; then
             echo "report-json=${REPORT_JSON}"
         fi
-        if [ -n "$REPORT_FILE_ABS" ]; then
-            echo "report-file=${REPORT_FILE_ABS}"
+        if [ -n "$REPORT_FILE_OUTPUT" ]; then
+            echo "report-file=${REPORT_FILE_OUTPUT}"
         fi
     } >> "$GITHUB_OUTPUT"
 fi

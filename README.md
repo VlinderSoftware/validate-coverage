@@ -9,6 +9,7 @@ A fast, Docker-based GitHub Action for validating test coverage from XML files a
 - ✅ **Configurable thresholds** - Set minimum coverage percentages
 - ✅ **Clear output** - Colored logs and detailed error messages
 - ✅ **GitHub Actions integration** - Outputs for use in other steps
+- ✅ **Portable machine-readable report** - A JSON summary any org's dashboard can consume as a workflow artifact
 
 ## Supported Coverage Formats
 
@@ -75,6 +76,86 @@ This action follows semantic versioning with convenience tags:
       })
 ```
 
+### Reporting to dashboards
+
+There are two independent, opt-in ways to feed a coverage result to a dashboard. Use either or
+both — neither changes the action's default behavior, and enabling one does not require the other.
+
+#### Commit status (GitHub-native, any consumer)
+
+Set `github-token` to have the action publish a [commit status](https://docs.github.com/en/rest/commits/statuses)
+with the coverage result, readable by any dashboard or tool that consumes GitHub's commit-status API.
+
+```yaml
+- name: Validate Coverage
+  id: coverage
+  uses: vln-devsecops/actions-validate-coverage@v1
+  with:
+    coverage-file: 'coverage/cobertura.xml'
+    minimum-coverage: '80'
+    github-token: ${{ github.token }}
+```
+
+The status is posted using the workflow's own `GITHUB_TOKEN` (the default `statuses: write`
+permission is enough — no PAT or cross-repo secret needed), with a `context` starting with
+`coverage` and a `description` of the form `Coverage: <percentage>% (min <minimum>%)`.
+
+One example consumer is the `vln-devsecops/operations` org dashboard, which reads the combined
+commit status of each monitored repo's **default branch** and looks for a `context` starting with
+`coverage`. Most commit-status consumers work the same way — the status only shows up if it's
+posted from a run against the default branch's latest commit (e.g. a `push` trigger on `main`), not
+from a pull-request run against a feature-branch commit. If your dashboard reads a repo's default
+branch status, make sure `github-token` is set on the workflow run that triggers there.
+
+Each caller posts its own commit status to its own repo with its own token, so this works the same
+way for any repo or org — it isn't specific to `vln-devsecops`. If your dashboard doesn't (or can't)
+read commit statuses, use the JSON report below instead.
+
+#### JSON report (portable — any org, any dashboard)
+
+The action always produces a `report-json` output: a compact JSON summary of the coverage result,
+independent of the commit-status feature above and requiring no token. Set `json-report-file` to
+additionally have it written to disk, so it can be uploaded as a workflow artifact for a dashboard
+(in any org) to fetch and parse later:
+
+```yaml
+- name: Validate Coverage
+  id: coverage
+  uses: vln-devsecops/actions-validate-coverage@v1
+  with:
+    coverage-file: 'coverage/clover.xml'
+    minimum-coverage: '80'
+    json-report-file: 'coverage-report.json'
+
+- name: Upload coverage report
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: coverage-report
+    path: ${{ steps.coverage.outputs.report-file }}
+```
+
+The report has the following shape:
+
+```json
+{
+  "coverageFile": "coverage/clover.xml",
+  "coverageType": "clover",
+  "coveragePercentage": 85,
+  "minimumCoverage": 80,
+  "status": "pass",
+  "covered": 85,
+  "total": 100,
+  "timestamp": "2026-07-11T16:10:40Z"
+}
+```
+
+`covered` and `total` are `null` when the coverage format doesn't expose those counts (for example,
+a Cobertura file without `lines-covered`/`lines-valid` attributes). Report generation is
+best-effort: if `jq` is unavailable or fails to build the report, the action logs a warning and
+still exits with the normal pass/fail status — a broken report never fails an otherwise-successful
+validation run.
+
 ## Inputs
 
 | Input | Description | Required | Default |
@@ -83,6 +164,9 @@ This action follows semantic versioning with convenience tags:
 | `minimum-coverage` | Minimum coverage percentage required | ❌ | 85 |
 | `coverage-type` | XML format type (`clover`, `cobertura`, `jacoco`) | ❌ | `cobertura` |
 | `working-directory` | Working directory for the coverage file | ❌ | `.` |
+| `github-token` | Token used to publish a commit status with the coverage result (e.g. `${{ github.token }}`). Omit to skip status publishing entirely — the action behaves exactly as before | ❌ | - |
+| `status-context` | Commit status context to publish under. Use a prefix a consumer filters on — `coverage` (the default) is what the `vln-devsecops/operations` dashboard looks for | ❌ | `coverage/validate-coverage` |
+| `json-report-file` | Path to write a machine-readable JSON coverage report (relative to `working-directory`), for dashboards that consume a workflow artifact instead of a commit status. Omit to skip file generation — the `report-json` output is still produced | ❌ | - |
 
 ## Outputs
 
@@ -90,6 +174,8 @@ This action follows semantic versioning with convenience tags:
 |--------|-------------|
 | `coverage-percentage` | The actual coverage percentage found |
 | `status` | `pass` or `fail` status of validation |
+| `report-json` | A compact JSON string summarizing the coverage report (see shape above) |
+| `report-file` | Path to the written JSON report file, relative to `$GITHUB_WORKSPACE` when possible so it's directly usable by later steps like `actions/upload-artifact` (falls back to an absolute container path otherwise). Only set when `json-report-file` is provided and the write succeeds |
 
 ## Examples
 

@@ -49,7 +49,7 @@ runs:
   # VERSIONING STRATEGY:
   # - Main branch: Always use 'latest' for continuous updates
   # - Release branches: Pin to specific version (e.g., '1.0.14' without 'v' prefix)
-  image: 'docker://ghcr.io/vln-devsecops/actions-validate-coverage:latest'
+  image: 'docker://ghcr.io/vln-devsecops/actions-validate-coverage:1.1.0'
   args:
     - ${{ inputs.coverage-file }}
     - ${{ inputs.minimum-coverage }}

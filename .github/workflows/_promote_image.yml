@@ -1,0 +1,119 @@
+name: Promote release image
+
+# Reusable workflow that builds the released image from source, tests it, and
+# publishes the vX.Y.Z / vX.Y / vX (and, when appropriate, `latest`) tags to
+# GHCR.
+#
+# Why this runs here instead of reacting to the pushed git tag:
+# tags and branches pushed with the default GITHUB_TOKEN do NOT trigger a
+# separate `on: push` workflow (GitHub suppresses this to avoid recursive runs).
+# release-please moves the release tags with that token, so an `on: push: tags`
+# promotion workflow never fires for an automated release. Doing the promotion
+# in the same run that creates the release is what makes automated releases
+# actually publish their image.
+#
+# It is also exposed via workflow_dispatch so a maintainer can (re)publish the
+# image for any existing release tag without a code change.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag to publish, including the v prefix (e.g. v1.2.0)'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish, including the v prefix (e.g. v1.2.0)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: vln-devsecops/actions-validate-coverage
+
+jobs:
+  promote:
+    name: Promote image to release tags
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout released source
+        uses: actions/checkout@v6
+        with:
+          # Need full history + tags so the "highest release" check below works.
+          fetch-depth: 0
+          ref: refs/tags/${{ inputs.tag }}
+
+      - name: Determine image tags
+        id: tags
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          VERSION="${TAG#v}"
+          MAJOR="${VERSION%%.*}"
+          MINOR="${VERSION%.*}"
+          IMAGE="${REGISTRY}/${IMAGE_NAME}"
+
+          # The full, minor and major convenience tags always move to this release.
+          TAGS="${IMAGE}:${VERSION}"
+          TAGS="${TAGS}"$'\n'"${IMAGE}:${MINOR}"
+          TAGS="${TAGS}"$'\n'"${IMAGE}:${MAJOR}"
+
+          # Only move `latest` when this release is the highest semver tag in the
+          # repo, so a backported patch to an older major can't clobber it.
+          HIGHEST=$(git tag -l \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1)
+          if [ "${TAG}" = "${HIGHEST}" ]; then
+            TAGS="${TAGS}"$'\n'"${IMAGE}:latest"
+          fi
+
+          echo "Publishing tags:"
+          echo "${TAGS}"
+          {
+            echo "list<<TAGS_EOF"
+            echo "${TAGS}"
+            echo "TAGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build to the local daemon first so we can test the exact image before
+      # any release tag is published.
+      - name: Build image for testing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # If this fails the release tags are never pushed.
+      - name: Test image
+        uses: ./.github/actions/test-docker
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}
+
+      # All layers are already cached from the test build, so this just applies
+      # the release tags and pushes.
+      - name: Push release tags
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.list }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

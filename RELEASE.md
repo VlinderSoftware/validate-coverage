@@ -17,8 +17,16 @@ based on [Conventional Commits](https://www.conventionalcommits.org/) merged to 
    - rewrites `action.yml` on that branch to pin the Docker image to the exact
      released version instead of `:latest`
    - force-moves the `vX.Y.Z`, `vX.Y`, and `vX` tags onto that pinned commit
-4. `cd_tag_image.yml` (unchanged) reacts to the moved `vX.Y.Z` tag and promotes the
-   already-built image to the release tags in `ghcr.io`.
+4. The `tag-image` job (in the same run) calls `_promote_image.yml`, which builds
+   the released image from source, tests it, and publishes the `X.Y.Z`, `X.Y`,
+   `X`, and (for the highest release) `latest` tags to `ghcr.io`.
+
+   > This promotion runs inside the release-please workflow on purpose. The
+   > release tags are moved with the default `GITHUB_TOKEN`, and GitHub does not
+   > start an `on: push: tags` workflow from a `GITHUB_TOKEN` push, so a separate
+   > tag-triggered workflow would silently never run. To (re)publish the image
+   > for an existing tag manually, run the **Promote release image** workflow
+   > (`workflow_dispatch`) and give it the tag, e.g. `v1.2.0`.
 
 `main`'s `action.yml` keeps referencing `:latest`, as before — only the release
 branches and tags pin to a specific version.

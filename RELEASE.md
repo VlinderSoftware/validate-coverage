@@ -16,7 +16,15 @@ based on [Conventional Commits](https://www.conventionalcommits.org/) merged to 
    - resets/creates `release/vN` (N = the new major version) from the release commit
    - rewrites `action.yml` on that branch to pin the Docker image to the exact
      released version instead of `:latest`
-   - force-moves the `vX.Y.Z`, `vX.Y`, and `vX` tags onto that pinned commit
+   - force-moves the floating `vX.Y` and `vX` tags onto that pinned commit
+
+   The exact-version tag (`vX.Y.Z`) is left where release-please created it, on
+   `main`. It used to be force-moved onto the pinned commit too, but that made
+   it unreachable from `main`'s history, which broke release-please's own
+   "commits since last release" bookkeeping — every subsequent run treated the
+   whole history as unreleased and re-proposed it (see #24). One consequence:
+   `@vX.Y.Z` no longer resolves to the pinned image reference, only the
+   floating `vX.Y` / `vX` tags do (see Usage below).
 4. The `tag-image` job (in the same run) calls `_promote_image.yml`, which builds
    the released image from source, tests it, and publishes the `X.Y.Z`, `X.Y`,
    `X`, and (for the highest release) `latest` tags to `ghcr.io`.
@@ -34,14 +42,15 @@ branches and tags pin to a specific version.
 ## Usage
 
 ```yaml
-# specific version (recommended for production)
-- uses: vln-devsecops/actions-validate-coverage@v1.2.3
-
-# minor version (gets patch updates)
+# minor version (recommended for production: gets patch updates, pinned image)
 - uses: vln-devsecops/actions-validate-coverage@v1.2
 
-# major version (gets all v1.x.x updates)
+# major version (gets all v1.x.x updates, pinned image)
 - uses: vln-devsecops/actions-validate-coverage@v1
+
+# exact version (not image-pinned — see note above; combine with a commit-SHA
+# pin for full reproducibility)
+- uses: vln-devsecops/actions-validate-coverage@v1.2.3
 ```
 
 ## Manual override

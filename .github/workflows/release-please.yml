@@ -26,11 +26,19 @@ jobs:
         id: release
 
   # main's action.yml always points at the ':latest' image; release/vN
-  # branches pin action.yml to the exact released version so that
-  # `uses: ...@vX.Y.Z` (and the floating @vX / @vX.Y tags) resolve to a
-  # reproducible image instead of drifting with 'latest'. This job
-  # reproduces what scripts/create-release.sh used to do by hand, but
-  # driven by release-please's version instead of a manual prompt.
+  # branches pin action.yml to the exact released version so that the
+  # floating `@vX` / `@vX.Y` tags resolve to a reproducible image instead
+  # of drifting with 'latest'. This job reproduces what
+  # scripts/create-release.sh used to do by hand, but driven by
+  # release-please's version instead of a manual prompt.
+  #
+  # The exact-version tag ($FULL, e.g. v1.4.0) is left untouched here —
+  # it's created by release-please pointing at the release commit on
+  # main. Moving it onto the release branch made it unreachable from
+  # main's history, which broke release-please's own "commits since last
+  # release" bookkeeping: it could no longer find the last release tag as
+  # an ancestor of main, so every subsequent run treated the entire
+  # history as unreleased (see #24).
   pin-release-branch:
     name: Pin release branch and move tags
     needs: release-please
@@ -66,10 +74,9 @@ jobs:
 
           git push origin "$RELEASE_BRANCH" --force
 
-          git tag -fa "$FULL" -m "Release $FULL"
           git tag -fa "$MAJOR" -m "Release $FULL"
           git tag -fa "$MINOR" -m "Release $FULL"
-          git push origin "refs/tags/$FULL" "refs/tags/$MAJOR" "refs/tags/$MINOR" --force
+          git push origin "refs/tags/$MAJOR" "refs/tags/$MINOR" --force
 
   # Build, test and publish the release-tagged image to GHCR.
   #

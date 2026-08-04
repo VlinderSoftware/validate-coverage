@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.1](https://github.com/vln-devsecops/actions-validate-coverage/compare/v1.4.0...v1.4.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* anchor last-release-sha to the actual v1.4.0 tag commit ([6db5adb](https://github.com/vln-devsecops/actions-validate-coverage/commit/6db5adb7ec6a178e8cf1ad3fd5e4a27d61c7ebe6))
+* re-baseline release-please and correct duplicated changelog history ([371c7c6](https://github.com/vln-devsecops/actions-validate-coverage/commit/371c7c64bb501e294ea0acedfbc287710c0039a9))
+* resync with canonical template after guidance[#12](https://github.com/vln-devsecops/actions-validate-coverage/issues/12) ([780963d](https://github.com/vln-devsecops/actions-validate-coverage/commit/780963d1b95ca4b78477eac08eb600a95d92fcb3))
+* stop force-moving the exact-version release tag ([eac8ae3](https://github.com/vln-devsecops/actions-validate-coverage/commit/eac8ae3413ee94ea7461bd5290b32cc4d7d4f827))
+* stop force-moving the exact-version release tag ([ce6956a](https://github.com/vln-devsecops/actions-validate-coverage/commit/ce6956a9aca43a137e596366483bbb7fd85714a5)), closes [#24](https://github.com/vln-devsecops/actions-validate-coverage/issues/24)
+
 ## [1.4.0](https://github.com/vln-devsecops/actions-validate-coverage/compare/v1.3.0...v1.4.0) (2026-08-02)
 
 

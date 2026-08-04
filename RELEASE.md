@@ -48,8 +48,8 @@ branches and tags pin to a specific version.
 # major version (gets all v1.x.x updates, pinned image)
 - uses: vln-devsecops/actions-validate-coverage@v1
 
-# exact version (not image-pinned — see note above; combine with a commit-SHA
-# pin for full reproducibility)
+# exact version (no automatic updates; does not pin the container image — for full reproducibility, pin to the commit SHA on the corresponding `release/vN` branch)
+# - uses: vln-devsecops/actions-validate-coverage@<commit-sha>
 - uses: vln-devsecops/actions-validate-coverage@v1.2.3
 ```
 

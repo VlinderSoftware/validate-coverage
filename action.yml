@@ -15,7 +15,7 @@ inputs:
     required: true
     default: '85'
   coverage-type:
-    description: 'Type of coverage XML format (clover, cobertura, jacoco)'
+    description: 'Type of coverage XML format (clover, cobertura, jacoco). The default is applied regardless of the coverage file''s name or extension, so a file named clover.xml is still parsed as Cobertura unless this is set.'
     required: false
     default: 'cobertura'
   working-directory:
@@ -23,7 +23,7 @@ inputs:
     required: false
     default: '.'
   github-token:
-    description: 'Token used to publish a commit status with the coverage result (typically the workflow''s github.token). Omit to skip status publishing entirely — the action behaves exactly as before.'
+    description: 'Token used to publish a commit status with the coverage result (typically the workflow''s github.token). Requires the statuses: write permission, which a workflow declaring an explicit permissions block must list explicitly. Omit to skip status publishing entirely — the action behaves exactly as before.'
     required: false
   status-context:
     description: 'Commit status context to publish under. Must start with "coverage" to be picked up by the org dashboard.'

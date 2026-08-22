@@ -42,7 +42,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout released source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # Need full history + tags so the "highest release" check below works.
           fetch-depth: 0

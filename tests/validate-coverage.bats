@@ -9,6 +9,8 @@ setup() {
     unset STATUS_TOKEN
     unset STATUS_CONTEXT
     unset GITHUB_WORKSPACE
+    unset GITHUB_EVENT_NAME
+    unset GITHUB_EVENT_PATH
     export GITHUB_SERVER_URL="https://github.com"
     export GITHUB_REPOSITORY="acme/widgets"
     export GITHUB_SHA="deadbeef"

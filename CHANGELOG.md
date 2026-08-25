@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.2](https://github.com/vln-devsecops/actions-validate-coverage/compare/v1.4.1...v1.4.2) (2026-08-25)
+
+
+### Bug Fixes
+
+* publish commit status to the PR head SHA, not the merge commit ([#41](https://github.com/vln-devsecops/actions-validate-coverage/issues/41)) ([7d46284](https://github.com/vln-devsecops/actions-validate-coverage/commit/7d46284825e81b0e12ad5f95351c65709a63b1bf))
+* resync automerge workflow with canonical template (guidance[#15](https://github.com/vln-devsecops/actions-validate-coverage/issues/15)) ([db1453b](https://github.com/vln-devsecops/actions-validate-coverage/commit/db1453bf1df48197f9e491a8036254b40b6eebfe)), closes [#23](https://github.com/vln-devsecops/actions-validate-coverage/issues/23)
+
 ## [1.4.1](https://github.com/vln-devsecops/actions-validate-coverage/compare/v1.4.0...v1.4.1) (2026-08-04)
 
 

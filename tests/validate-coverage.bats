@@ -9,6 +9,8 @@ setup() {
     unset STATUS_TOKEN
     unset STATUS_CONTEXT
     unset GITHUB_WORKSPACE
+    unset GITHUB_EVENT_NAME
+    unset GITHUB_EVENT_PATH
     export GITHUB_SERVER_URL="https://github.com"
     export GITHUB_REPOSITORY="acme/widgets"
     export GITHUB_SHA="deadbeef"
@@ -300,6 +302,85 @@ EOF
     assert_output_contains "::warning::failed to build coverage JSON report"
     assert_output_contains "Coverage validation passed!"
     ! grep -q "^report-json=" "$OUTPUT_FILE"
+}
+
+@test "publishes the commit status to the PR head SHA on pull_request, not GITHUB_SHA" {
+    setup_fake_curl 0
+    export STATUS_TOKEN="test-token"
+    export GITHUB_EVENT_NAME="pull_request"
+    event_path="$BATS_TEST_TMPDIR/event.json"
+    jq -n '{pull_request: {head: {sha: "prheadsha123"}}}' > "$event_path"
+    export GITHUB_EVENT_PATH="$event_path"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    grep -q "api.github.com/repos/acme/widgets/statuses/prheadsha123" "$CURL_LOG"
+    ! grep -q "api.github.com/repos/acme/widgets/statuses/deadbeef" "$CURL_LOG"
+}
+
+@test "publishes the commit status to the PR head SHA on pull_request_target" {
+    setup_fake_curl 0
+    export STATUS_TOKEN="test-token"
+    export GITHUB_EVENT_NAME="pull_request_target"
+    event_path="$BATS_TEST_TMPDIR/event.json"
+    jq -n '{pull_request: {head: {sha: "prheadsha456"}}}' > "$event_path"
+    export GITHUB_EVENT_PATH="$event_path"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    grep -q "api.github.com/repos/acme/widgets/statuses/prheadsha456" "$CURL_LOG"
+}
+
+@test "falls back to GITHUB_SHA on pull_request when the event payload is unavailable" {
+    setup_fake_curl 0
+    export STATUS_TOKEN="test-token"
+    export GITHUB_EVENT_NAME="pull_request"
+    unset GITHUB_EVENT_PATH
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    grep -q "api.github.com/repos/acme/widgets/statuses/deadbeef" "$CURL_LOG"
+}
+
+@test "falls back to GITHUB_SHA on pull_request when the event payload has no PR head sha" {
+    setup_fake_curl 0
+    export STATUS_TOKEN="test-token"
+    export GITHUB_EVENT_NAME="pull_request"
+    event_path="$BATS_TEST_TMPDIR/event.json"
+    jq -n '{}' > "$event_path"
+    export GITHUB_EVENT_PATH="$event_path"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    grep -q "api.github.com/repos/acme/widgets/statuses/deadbeef" "$CURL_LOG"
+}
+
+@test "uses GITHUB_SHA as before on push events, ignoring any stray GITHUB_EVENT_PATH" {
+    setup_fake_curl 0
+    export STATUS_TOKEN="test-token"
+    export GITHUB_EVENT_NAME="push"
+    event_path="$BATS_TEST_TMPDIR/event.json"
+    jq -n '{pull_request: {head: {sha: "shouldnotbeused"}}}' > "$event_path"
+    export GITHUB_EVENT_PATH="$event_path"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    grep -q "api.github.com/repos/acme/widgets/statuses/deadbeef" "$CURL_LOG"
+}
+
+@test "logs the published commit status and target SHA on success" {
+    setup_fake_curl 0
+    export STATUS_TOKEN="test-token"
+
+    run "$SCRIPT" "$REPO_ROOT/examples/clover.xml" 80 clover
+
+    [ "$status" -eq 0 ]
+    assert_output_contains "Published commit status coverage/validate-coverage=success to deadbeef"
 }
 
 @test "publishes both a commit status and a report file when both are configured" {

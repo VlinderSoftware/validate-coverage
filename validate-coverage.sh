@@ -284,6 +284,23 @@ if [ -n "$GITHUB_OUTPUT" ]; then
     } >> "$GITHUB_OUTPUT"
 fi
 
+# On pull_request/pull_request_target, GITHUB_SHA is the ephemeral merge
+# commit GitHub creates at refs/pull/N/merge, not the PR head - a status
+# posted there is invisible on the PR and can never satisfy a branch
+# protection rule. Prefer the PR head SHA from the event payload in that
+# case, falling back to GITHUB_SHA if it isn't available.
+resolve_status_sha() {
+    case "${GITHUB_EVENT_NAME:-}" in
+        pull_request|pull_request_target)
+            if [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -r "${GITHUB_EVENT_PATH}" ] && command -v jq &> /dev/null; then
+                jq -r '.pull_request.head.sha // empty' "${GITHUB_EVENT_PATH}" 2>/dev/null || true
+                return
+            fi
+            ;;
+    esac
+    printf '%s' "${GITHUB_SHA}"
+}
+
 # Publish a commit status with the coverage result, if a token was provided.
 # This is entirely opt-in: with no STATUS_TOKEN, this is a no-op so existing
 # callers see zero behavior change.
@@ -301,7 +318,10 @@ publish_commit_status() {
 
     local context="${STATUS_CONTEXT:-coverage/validate-coverage}"
     local target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-    local api_url="${GITHUB_API_URL:-https://api.github.com}/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+    local status_sha
+    status_sha="$(resolve_status_sha)"
+    status_sha="${status_sha:-${GITHUB_SHA}}"
+    local api_url="${GITHUB_API_URL:-https://api.github.com}/repos/${GITHUB_REPOSITORY}/statuses/${status_sha}"
 
     # Building the payload must never fail the run either, so guard the jq
     # call itself rather than letting `set -e` abort on a non-zero exit.
@@ -327,6 +347,8 @@ publish_commit_status() {
         --output /dev/null \
         "$api_url"; then
         echo "::warning::failed to publish coverage commit status"
+    else
+        log "Published commit status ${context}=${state} to ${status_sha}"
     fi
 }
 
